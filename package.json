@@ -1,0 +1,13 @@
+{
+  "dependencies": {
+    "@openzeppelin/test-helpers": "^0.5.6",
+    "@uniswap/v2-core": "^1.0.1",
+    "synthetix": "^2.28.4-beta",
+    "truffle": "^5.1.45"
+  },
+  "prettier": {
+    "printWidth": 120,
+    "singleQuote": true,
+    "tabWidth": 2
+  }
+}
