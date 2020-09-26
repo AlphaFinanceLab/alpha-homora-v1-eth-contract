@@ -9,8 +9,9 @@ import "./uniswap/IUniswapV2Router02.sol";
 import "./uniswap/UniswapV2Library.sol";
 import "./strategy/Strategy.sol";
 import "./SafeToken.sol";
+import "./Goblin.sol";
 
-contract UniWorker is Ownable, ReentrancyGuard {
+contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     using SafeToken for address;
     using SafeMath for uint256;
 
@@ -89,7 +90,7 @@ contract UniWorker is Ownable, ReentrancyGuard {
         path[1] = address(weth);
         router.swapExactTokensForETH(rewardBalance, 0, path, address(this), now);
         // 3. Use add ETH strategy to convert all ETH to LP tokens.
-        addStrat.execute.value(address(this).balance)(address(0), 0, abi.encode(fToken));
+        addStrat.execute.value(address(this).balance)(address(0), 0, abi.encode(fToken, 0));
         // 4. Mint more LP tokens and stake them for more rewards.
         staking.stake(lpToken.balanceOf(address(this)));
     }
@@ -106,17 +107,15 @@ contract UniWorker is Ownable, ReentrancyGuard {
         nonReentrant
         returns (uint256)
     {
-        // 1. Re-invest any rewards
-        reinvest();
-        // 2. Convert this position back to LP tokens.
+        // 1. Convert this position back to LP tokens.
         _removeShare(id);
-        // 3. Perform the worker strategy; sending LP tokens + ETH; expecting LP tokens + ETH.
+        // 2. Perform the worker strategy; sending LP tokens + ETH; expecting LP tokens + ETH.
         (address strat, bytes memory ext) = abi.decode(data, (address, bytes));
         lpToken.transfer(strat, lpToken.balanceOf(address(this)));
         Strategy(strat).execute.value(msg.value)(user, debt, ext);
-        // 4. Add LP tokens back to the farming pool.
+        // 3. Add LP tokens back to the farming pool.
         _addShare(id);
-        // 5. Return any remaining ETH back to the operator.
+        // 4. Return any remaining ETH back to the operator.
         uint256 balance = address(this).balance;
         SafeToken.safeTransferETH(msg.sender, balance);
         return balance;
@@ -157,13 +156,11 @@ contract UniWorker is Ownable, ReentrancyGuard {
     /// @dev Liquidate the given position by converting it to ETH and return back to caller.
     /// @param id The position ID to perform liquidation
     function liquidate(uint256 id) external onlyOperator nonReentrant returns (uint256) {
-        // 1. Re-invest any rewards.
-        reinvest();
-        // 2. Convert the position back to LP tokens and use liquidate strategy.
+        // 1. Convert the position back to LP tokens and use liquidate strategy.
         _removeShare(id);
         lpToken.transfer(address(liqStrat), lpToken.balanceOf(address(this)));
         liqStrat.execute(address(0), 0, abi.encode(fToken));
-        // 3. Return all available ETH back to the operator.
+        // 2. Return all available ETH back to the operator.
         uint256 balance = address(this).balance;
         SafeToken.safeTransferETH(msg.sender, balance);
         return balance;

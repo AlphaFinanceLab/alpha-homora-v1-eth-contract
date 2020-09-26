@@ -30,7 +30,7 @@ contract StrategyLiquidate is Ownable, ReentrancyGuard, Strategy {
         nonReentrant
     {
         // 1. Find out what farming token we are dealing with.
-        address fToken = abi.decode(data, (address));
+        (address fToken, uint256 minETH) = abi.decode(data, (address, uint256));
         IUniswapV2Pair lpToken = IUniswapV2Pair(factory.getPair(fToken, weth));
         // 2. Remove all liquidity back to ETH and farming tokens.
         lpToken.approve(address(router), uint256(-1));
@@ -43,6 +43,7 @@ contract StrategyLiquidate is Ownable, ReentrancyGuard, Strategy {
         router.swapExactTokensForETH(fToken.myBalance(), 0, path, address(this), now);
         // 4. Return all ETH back to the original caller.
         uint256 balance = address(this).balance;
+        require(balance >= minETH, "!minETH");
         SafeToken.safeTransferETH(msg.sender, balance);
     }
 

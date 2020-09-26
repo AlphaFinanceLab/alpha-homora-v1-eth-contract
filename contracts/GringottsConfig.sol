@@ -1,6 +1,6 @@
 pragma solidity 0.5.16;
 
-interface DegenPoolConfig {
+interface GringottsConfig {
     /// @dev Poke the config pool to update its internal state.
     function poke() external;
 

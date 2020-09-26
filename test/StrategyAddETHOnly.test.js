@@ -46,22 +46,45 @@ contract('StrategyAddETHOnly', ([deployer, alice, bob]) => {
       from: alice,
     });
     // Bob uses AddETHOnly strategy to add 1e17 WEI
-    await this.strat.execute(bob, '0', web3.eth.abi.encodeParameters(['address'], [this.token.address]), {
-      value: web3.utils.toWei('0.1', 'ether'),
-      from: bob,
-    });
+    await this.strat.execute(
+      bob,
+      '0',
+      web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0']),
+      {
+        value: web3.utils.toWei('0.1', 'ether'),
+        from: bob,
+      }
+    );
     assert.equal('15411526978189516', await this.lp.balanceOf(bob));
     assert.equal('0', await this.lp.balanceOf(this.strat.address));
     assert.equal('0', await this.token.balanceOf(this.strat.address));
     // Bob uses AddETHOnly strategy to add another 1e17 WEI
     await this.lp.transfer(this.strat.address, '15411526978189516', { from: bob });
-    await this.strat.execute(bob, '0', web3.eth.abi.encodeParameters(['address'], [this.token.address]), {
-      value: web3.utils.toWei('0.1', 'ether'),
-      from: bob,
-    });
+    await this.strat.execute(
+      bob,
+      '0',
+      web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '10000000000000000']),
+      {
+        value: web3.utils.toWei('0.1', 'ether'),
+        from: bob,
+      }
+    );
     assert.equal('30136025967736232', await this.lp.balanceOf(bob));
     assert.equal('0', await this.lp.balanceOf(this.strat.address));
     assert.equal('0', await this.token.balanceOf(this.strat.address));
+    // Bob uses AddETHOnly yet again, but now with an unreasonable min LP request
+    await expectRevert(
+      this.strat.execute(
+        bob,
+        '0',
+        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '50000000000000000']),
+        {
+          value: web3.utils.toWei('0.1', 'ether'),
+          from: bob,
+        }
+      ),
+      '!minLPAmount'
+    );
   });
 
   it('should only allow owner to withdraw loss ERC20 tokens', async () => {

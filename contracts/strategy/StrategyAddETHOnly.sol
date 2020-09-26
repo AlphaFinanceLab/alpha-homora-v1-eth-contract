@@ -33,8 +33,8 @@ contract StrategyAllETHOnly is Ownable, ReentrancyGuard, Strategy {
         payable
         nonReentrant
     {
-        // 1. Find out what farming token we are dealing with.
-        address fToken = abi.decode(data, (address));
+        // 1. Find out what farming token we are dealing with and min additional LP tokens.
+        (address fToken, uint256 minLPAmount) = abi.decode(data, (address, uint256));
         IUniswapV2Pair lpToken = IUniswapV2Pair(factory.getPair(fToken, weth));
         // 2. Compute the optimal amount of ETH to be converted to farming tokens.
         uint256 balance = address(this).balance;
@@ -46,9 +46,12 @@ contract StrategyAllETHOnly is Ownable, ReentrancyGuard, Strategy {
         path[0] = weth;
         path[1] = fToken;
         router.swapExactETHForTokens.value(aIn)(0, path, address(this), now);
-        // 5. Mint more LP tokens and return all LP tokens to the sender.
+        // 4. Mint more LP tokens and return all LP tokens to the sender.
         fToken.safeApprove(address(router), uint(-1));
-        router.addLiquidityETH.value(address(this).balance)(fToken, fToken.myBalance(), 0, 0, address(this), now);
+        (,, uint256 moreLPAmount) = router.addLiquidityETH.value(address(this).balance)(
+            fToken, fToken.myBalance(), 0, 0, address(this), now
+        );
+        require(moreLPAmount >= minLPAmount, "!minLPAmount");
         lpToken.transfer(msg.sender, lpToken.balanceOf(address(this)));
     }
 

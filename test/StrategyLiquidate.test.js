@@ -36,11 +36,28 @@ contract('StrategyLiquidate', ([deployer, alice, bob]) => {
     });
     assert.equal('900000000000000000', await this.token.balanceOf(bob));
     assert.equal('316227766016837933', await this.lp.balanceOf(bob));
-    // Bob uses liquidate strategy to turn all LPs back to ETH
+    // Bob uses liquidate strategy to turn all LPs back to ETH but with an unreasonable expectation
     await this.lp.transfer(this.strat.address, '316227766016837933', { from: bob });
-    await this.strat.execute(bob, '0', web3.eth.abi.encodeParameters(['address'], [this.token.address]), {
-      from: bob,
-    });
+    await expectRevert(
+      this.strat.execute(
+        bob,
+        '0',
+        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('2', 'ether')]),
+        {
+          from: bob,
+        }
+      ),
+      '!minETH'
+    );
+    // Bob uses liquidate strategy to turn all LPs back to ETH with a sane minimum value
+    await this.strat.execute(
+      bob,
+      '0',
+      web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
+      {
+        from: bob,
+      }
+    );
     assert.equal('0', await this.lp.balanceOf(this.strat.address));
     assert.equal('0', await this.lp.balanceOf(bob));
     assert.equal('500751126690035053', await this.weth.balanceOf(this.lp.address));

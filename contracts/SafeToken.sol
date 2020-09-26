@@ -1,16 +1,16 @@
 pragma solidity 0.5.16;
 
-interface IERC20 {
+interface ERC20Interface {
     function balanceOf(address user) external view returns (uint256);
 }
 
 library SafeToken {
     function myBalance(address token) internal view returns (uint256) {
-        return IERC20(token).balanceOf(address(this));
+        return ERC20Interface(token).balanceOf(address(this));
     }
 
     function balanceOf(address token, address user) internal view returns (uint256) {
-        return IERC20(token).balanceOf(user);
+        return ERC20Interface(token).balanceOf(user);
     }
 
     function safeApprove(address token, address to, uint256 value) internal {
