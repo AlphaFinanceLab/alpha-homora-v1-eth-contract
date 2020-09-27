@@ -52,33 +52,23 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         lastAccrueTime = now;
     }
 
+    /// @dev Return the ETH debt value given the debt share.
+    /// @param debtShare The debt share to be converted.
+    function debtShareToVal(uint256 debtShare) public view returns (uint256) {
+        if (glbDebtShare == 0) return debtShare; // When there's no share, 1 share = 1 val.
+        return debtShare.mul(glbDebtVal).div(glbDebtShare);
+    }
+
+    /// @dev Return the debt share for the given debt value.
+    /// @param debtVal The debt value to be converted.
+    function debtValToShare(uint256 debtVal) public view returns (uint256) {
+        if (glbDebtShare == 0) return debtVal; // When there's no share, 1 share = 1 val.
+        return debtVal.mul(glbDebtShare).div(glbDebtVal);
+    }
+
     /// @dev Return the total ETH entitied to the token holders.
     function totalETH() public view returns (uint256) {
         return address(this).balance.add(glbDebtVal).sub(reservePool);
-    }
-
-    /// @dev Return whether the given position can be open.
-    function canOpen(uint256 id) public view returns (bool) {
-        require(id < positions.length, "!position.id");
-        Position storage pos = positions[id];
-        if (pos.debtShare == 0) {
-            return true; // No debt. Healthy!
-        }
-        uint256 debt = pos.debtShare.mul(glbDebtVal).div(glbDebtShare);
-        uint256 value = Goblin(pos.goblin).health(id);
-        return value.mul(10000) >= debt.mul(config.openFactor(pos.goblin));
-    }
-
-    /// @dev Return whether the given position can be liquidated.
-    function canLiquidate(uint256 id) public view returns (bool) {
-        require(id < positions.length, "!position.id");
-        Position storage pos = positions[id];
-        if (pos.debtShare == 0) {
-            return false; // No debt. Healthy!
-        }
-        uint256 debt = pos.debtShare.mul(glbDebtVal).div(glbDebtShare);
-        uint256 value = Goblin(pos.goblin).health(id);
-        return value.mul(10000) < debt.mul(config.liquidateFactor(pos.goblin));
     }
 
     /// @dev Add more ETH to Gringotts. Hope to get some good returns.
@@ -101,51 +91,40 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @dev Create a new farming position to unlock your yield farming potential.
     /// @param id The ID of the position to unlock the earning. Use MAX_UINT for new position.
     /// @param goblin The address of the authorized goblin to work for this position.
-    /// @param moreDebt The amount of ETH to borrow from the pool.
-    /// @param maxLessDebt The max amount of ETH to return to the pool.
+    /// @param loan The amount of ETH to borrow from the pool.
+    /// @param maxReturn The max amount of ETH to return to the pool.
     /// @param data The calldata to pass along to the goblin for more working context.
-    function alohomora(
-        uint256 id,
-        address goblin,
-        uint256 moreDebt,
-        uint256 maxLessDebt,
-        bytes calldata data
-    ) external payable onlyEOA accrue nonReentrant {
-        // 1. Sanity check the input values.
+    function alohomora(uint256 id, address goblin, uint256 loan, uint256 maxReturn, bytes calldata data)
+        external payable
+        onlyEOA accrue nonReentrant
+    {
+        // 1. Sanity check the input ID, or add a new position of ID is MAX_UINT.
         if (id == uint256(-1)) {
             id = positions.length;
             positions.push(Position({goblin: goblin, owner: msg.sender, debtShare: 0}));
+        } else {
+            require(id < positions.length, "!position.id");
         }
-        require(config.isWhiteListed(goblin), "!goblin.isWhiteListed");
-        require(id < positions.length, "!position.id");
+        // 2.
         Position storage pos = positions[id];
+        require(config.isWhiteListed(goblin), "!goblin.isWhiteListed");
         require(pos.owner == msg.sender, "!position.owner");
         require(pos.goblin == goblin, "!position.goblin");
         // 2. Compute new position debt.
-        uint256 currentDebt = pos.debtShare == 0
-            ? 0
-            : pos.debtShare.mul(glbDebtVal).div(glbDebtShare);
-        uint256 newDebt = currentDebt.add(moreDebt);
+        uint256 debt = _removeDebt(pos).add(loan);
         // 3. Perform the actual work.
-        uint256 back = Goblin(pos.goblin).work.value(msg.value.add(moreDebt))(
-            id,
-            msg.sender,
-            newDebt,
-            data
-        );
+        uint256 beforeETH = address(this).balance;
+        Goblin(pos.goblin).work.value(msg.value.add(loan))(id, msg.sender, debt, data);
+        uint256 back = address(this).balance.sub(beforeETH);
         // 4. Update position debt.
-        uint256 lessDebt = Math.min(newDebt, Math.min(back, maxLessDebt));
-        newDebt = newDebt.sub(lessDebt);
-        uint256 newDebtShare = glbDebtShare == 0
-            ? newDebt
-            : newDebt.mul(glbDebtShare).div(glbDebtVal);
-        glbDebtVal = glbDebtVal.add(newDebt).sub(currentDebt);
-        glbDebtShare = glbDebtShare.add(newDebtShare).sub(pos.debtShare);
-        pos.debtShare = newDebtShare;
-        // 5. Check position health.
-        require(newDebt >= config.minDebtSize(), "!minDebtSize");
-        require(canOpen(id), "!position.canOpen");
-        // TODO: Check max goblin debt.
+        uint256 lessDebt = Math.min(debt, Math.min(back, maxReturn));
+        debt = debt.sub(lessDebt);
+        // 5. Check position health. Only applicable with nonzero debt.
+        if (debt > 0) {
+            require(debt >= config.minDebtSize(), "!minDebtSize");
+            // TODO: Check with goblin config.
+        }
+        _addDebt(pos, debt);
         // 6. Return ETH back.
         if (back > lessDebt) SafeToken.safeTransferETH(msg.sender, back - lessDebt);
     }
@@ -153,23 +132,39 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @dev *Avada Kedavra* Cast the killing curse to the position. Liquidate it immediately.
     /// @param id The position ID to be killed.
     function kedavra(uint256 id) external onlyEOA accrue nonReentrant {
-        //
+        // 1. Verify that the position is eligible for liquidation.
         require(id < positions.length, "!position.id");
         Position storage pos = positions[id];
-        require(canLiquidate(id), "!position.canLiquidate");
-        //
-        uint256 wad = Goblin(pos.goblin).liquidate(id);
-        uint256 prize = wad.mul(config.getKedavraBps()).div(10000);
-        uint256 rest = wad.sub(prize);
-        uint256 debt = pos.debtShare.mul(glbDebtVal).div(glbDebtShare);
-        uint256 remain = rest > debt ? rest.sub(debt) : 0;
-        //
-        glbDebtVal = glbDebtVal.sub(debt);
-        glbDebtShare = glbDebtShare.sub(pos.debtShare);
-        pos.debtShare = 0;
-        //
+        uint256 debt = _removeDebt(pos);
+        uint256 health = Goblin(pos.goblin).health(id);
+        require(health.mul(10000) < debt.mul(config.liquidateFactor(pos.goblin)), "!liquidate");
+        // 2. Perform liquidation and compute the amount of ETH received.
+        uint256 beforeETH = address(this).balance;
+        Goblin(pos.goblin).liquidate(id);
+        uint256 back = address(this).balance.sub(beforeETH);
+        uint256 prize = back.mul(config.getKedavraBps()).div(10000);
+        uint256 rest = back.sub(prize);
+        // 3. Clear position debt and return funds to liquidator and position owner.
         if (prize > 0) SafeToken.safeTransferETH(msg.sender, prize);
-        if (remain > 0) SafeToken.safeTransferETH(pos.owner, remain);
+        if (rest > debt) SafeToken.safeTransferETH(pos.owner, rest - debt);
+    }
+
+    /// @dev Internal function to add the given debt value to the given position.
+    function _addDebt(Position storage pos, uint256 debtVal) internal {
+        uint256 debtShare = debtValToShare(debtVal);
+        pos.debtShare = pos.debtShare.add(debtShare);
+        glbDebtShare = glbDebtShare.add(debtShare);
+        glbDebtVal = glbDebtVal.add(debtVal);
+    }
+
+    /// @dev Internal function to clear the debt of the given position. Return the debt value.
+    function _removeDebt(Position storage pos) internal returns (uint256) {
+        uint256 debtShare = pos.debtShare;
+        uint256 debtVal = debtShareToVal(debtShare);
+        pos.debtShare = 0;
+        glbDebtShare = glbDebtShare.sub(debtShare);
+        glbDebtVal = glbDebtVal.sub(debtVal);
+        return debtVal;
     }
 
     /// @dev Update pool configuration to a new address. Must only be called by owner.
@@ -183,8 +178,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @param value The number of ETH tokens to withdraw. Must not exceed `reservePool`.
     function withdrawReserve(address to, uint256 value) external onlyOwner nonReentrant {
         reservePool = reservePool.sub(value);
-        (bool remainOk, ) = to.call.value(value)(new bytes(0));
-        require(remainOk, "!reserve.transfer");
+        SafeToken.safeTransferETH(to, value);
     }
 
     /// @dev Recover ERC20 tokens that were accidentally sent to this smart contract.

@@ -28,7 +28,6 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     Strategy liqStrat;
 
     mapping(uint256 => uint256) shares;
-    mapping(address => bool) approvedStrat;
     uint256 public totalShare;
 
     constructor(
@@ -56,6 +55,12 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         _uni.safeApprove(address(router), uint256(-1)); // 100% trust in the router
     }
 
+    /// @dev Require that the caller must be an EOA account to avoid flash loans.
+    modifier onlyEOA() {
+        require(msg.sender == tx.origin, "!eoa");
+        _;
+    }
+
     modifier onlyOperator() {
         require(msg.sender == operator, "!operator");
         _;
@@ -64,6 +69,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @dev Return the entitied LP token balance for the given shares.
     /// @param share The number of shares to be converted to LP balance.
     function shareToBalance(uint256 share) public view returns (uint256) {
+        if (totalShare == 0) return share; // When there's no share, 1 share = 1 balance.
         uint256 totalBalance = staking.balanceOf(address(this));
         return share.mul(totalBalance).div(totalShare);
     }
@@ -71,15 +77,13 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @dev Return the number of shares to receive if staking the given LP tokens.
     /// @param balance the number of LP tokens to be converted to shares.
     function balanceToShare(uint256 balance) public view returns (uint256) {
-        if (totalShare == 0) {
-            return balance;
-        }
+        if (totalShare == 0) return balance; // When there's no share, 1 share = 1 balance.
         uint256 totalBalance = staking.balanceOf(address(this));
         return balance.mul(totalShare).div(totalBalance);
     }
 
     /// @dev Re-invest whatever this worker has earned back to staked LP tokens.
-    function reinvest() public {
+    function reinvest() public onlyEOA nonReentrant {
         // 1. Withdraw all the rewards.
         staking.getReward();
         uint256 rewardBalance = uni.myBalance();
@@ -101,11 +105,8 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @param debt The amount of user debt to help the strategy make decisions.
     /// @param data The encoded data, consisting of strategy address and calldata.
     function work(uint256 id, address user, uint256 debt, bytes calldata data)
-        external
-        payable
-        onlyOperator
-        nonReentrant
-        returns (uint256)
+        external payable
+        onlyOperator nonReentrant
     {
         // 1. Convert this position back to LP tokens.
         _removeShare(id);
@@ -116,54 +117,48 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         // 3. Add LP tokens back to the farming pool.
         _addShare(id);
         // 4. Return any remaining ETH back to the operator.
-        uint256 balance = address(this).balance;
-        SafeToken.safeTransferETH(msg.sender, balance);
-        return balance;
+        SafeToken.safeTransferETH(msg.sender, address(this).balance);
+    }
+
+    /// @dev Return maximum output given the input amount and the status of Uniswap reserves.
+    /// @param aIn The amount of asset to market sell.
+    /// @param rIn the amount of asset in reserve for input.
+    /// @param rOut The amount of asset in reserve for output.
+    function getMktSellAmount(uint256 aIn, uint256 rIn, uint256 rOut) public pure returns (uint256) {
+        require(aIn > 0 && rIn > 0 && rOut > 0, "!getAmountOut");
+        uint256 aInWithFee = aIn.mul(997);
+        uint256 numerator = aInWithFee.mul(rOut);
+        uint256 denominator = rIn.mul(1000).add(aInWithFee);
+        return numerator / denominator;
     }
 
     /// @dev Return the amount of ETH to receive if we are to liquidate the given position.
     /// @param id The position ID to perform health check.
     function health(uint256 id) external view returns (uint256) {
-        // 1. Get the position's and total LP token balances.
+        // 1. Get the position's LP balance and LP total supply.
         uint256 lpBalance = shareToBalance(shares[id]);
-        uint256 lpSupply = lpToken.totalSupply();
-        if (factory.feeTo() != address(0)) {
-            uint256 kLast = lpToken.kLast();
-            if (kLast != 0) {
-                (uint256 reserve0, uint256 reserve1, ) = lpToken.getReserves();
-                uint256 rootK = Math.sqrt(reserve0.mul(reserve1));
-                uint256 rootKLast = Math.sqrt(kLast);
-                if (rootK > rootKLast) {
-                    uint256 numerator = lpSupply.mul(rootK.sub(rootKLast));
-                    uint256 denominator = rootK.mul(5).add(rootKLast);
-                    lpSupply = lpSupply.add(numerator / denominator);
-                }
-            }
-        }
-        // 2. Get the pool's total supply of ETH and farming token.
+        uint256 lpSupply = lpToken.totalSupply(); // Ignore pending mintFee as it is insignificant
+        // 2. Get the pool's total supply of WETH and farming token.
         uint256 totalWETH = weth.balanceOf(address(lpToken));
-        uint256 totalFarming = fToken.balanceOf(address(lpToken));
+        uint256 totalfToken = fToken.balanceOf(address(lpToken));
         // 3. Convert the position's LP tokens to the underlying assets.
         uint256 userWETH = lpBalance.mul(totalWETH).div(lpSupply);
-        uint256 userFarming = lpBalance.mul(totalFarming).div(lpSupply);
+        uint256 userfToken = lpBalance.mul(totalfToken).div(lpSupply);
         // 4. Convert all farming tokens to ETH and return total ETH.
-        uint256 userMoreWETH = UniswapV2Library.getAmountOut(
-            userFarming, totalFarming.sub(userFarming), totalWETH.sub(userWETH)
-        );
-        return userWETH.add(userMoreWETH);
+        return getMktSellAmount(
+            userfToken, totalfToken.sub(userfToken), totalWETH.sub(userWETH)
+        ).add(userWETH);
     }
 
     /// @dev Liquidate the given position by converting it to ETH and return back to caller.
     /// @param id The position ID to perform liquidation
-    function liquidate(uint256 id) external onlyOperator nonReentrant returns (uint256) {
+    function liquidate(uint256 id) external onlyOperator nonReentrant {
         // 1. Convert the position back to LP tokens and use liquidate strategy.
         _removeShare(id);
         lpToken.transfer(address(liqStrat), lpToken.balanceOf(address(this)));
         liqStrat.execute(address(0), 0, abi.encode(fToken));
         // 2. Return all available ETH back to the operator.
-        uint256 balance = address(this).balance;
-        SafeToken.safeTransferETH(msg.sender, balance);
-        return balance;
+        SafeToken.safeTransferETH(msg.sender, address(this).balance);
     }
 
     /// @dev Internal function to stake all outstanding LP tokens to the given position ID.
