@@ -16,7 +16,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @notice Events
     event AddDebt(uint256 indexed id, uint256 debtShare);
     event RemoveDebt(uint256 indexed id, uint256 debtShare);
-    event Alohomora();
+    event Alohomora(uint256 indexed id, uint256 loan);
     event Kedavra(uint256 indexed id, address indexed killer, uint256 prize, uint256 left);
 
     struct Position {
@@ -118,7 +118,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         external payable
         onlyEOA accrue nonReentrant
     {
-        // 1. Sanity check the input ID, or add a new position of ID is 0.
+        // 1. Sanity check the input position, or add a new position of ID is 0.
         Position storage pos = positions[id];
         if (id == 0) {
             id = nextPositionID++;
@@ -131,6 +131,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
             require(pos.goblin == goblin, "bad position goblin");
             require(pos.owner == msg.sender, "not position owner");
         }
+        emit Alohomora(id, loan);
         // 2. Make sure the goblin can accept more debt and remove the existing debt.
         require(loan == 0 || config.acceptDebt(goblin), "goblin not accept more debt");
         uint256 debt = _removeDebt(id).add(loan);
