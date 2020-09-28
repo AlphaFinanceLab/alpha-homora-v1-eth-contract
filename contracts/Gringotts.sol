@@ -125,23 +125,20 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         onlyEOA accrue(msg.value) nonReentrant
     {
         // 1. Sanity check the input position, or add a new position of ID is 0.
-        Position storage pos = positions[id];
         if (id == 0) {
             id = nextPositionID++;
-            pos = positions[id];
             positions[id].goblin = goblin;
             positions[id].owner = msg.sender;
         } else {
             require(id < nextPositionID, "bad position id");
-            pos = positions[id];
-            require(pos.goblin == goblin, "bad position goblin");
-            require(pos.owner == msg.sender, "not position owner");
+            require(positions[id].goblin == goblin, "bad position goblin");
+            require(positions[id].owner == msg.sender, "not position owner");
         }
         emit Alohomora(id, loan);
         // 2. Make sure the goblin can accept more debt and remove the existing debt.
         require(loan == 0 || config.acceptDebt(goblin), "goblin not accept more debt");
         uint256 debt = _removeDebt(id).add(loan);
-        // 3. Perform the actual work, using a new scope to avoid stack-to-deep errors.
+        // 3. Perform the actual work, using a new scope to avoid stack-too-deep errors.
         uint256 back;
         {
             uint256 sendETH = msg.value.add(loan);
