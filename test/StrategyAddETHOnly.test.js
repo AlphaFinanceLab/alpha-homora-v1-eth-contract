@@ -83,7 +83,7 @@ contract('StrategyAddETHOnly', ([deployer, alice, bob]) => {
           from: bob,
         }
       ),
-      '!minLPAmount'
+      'insufficient LP tokens received'
     );
   });
 

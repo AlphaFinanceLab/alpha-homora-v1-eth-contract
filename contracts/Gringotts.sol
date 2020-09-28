@@ -9,11 +9,15 @@ import "./Goblin.sol";
 import "./SafeToken.sol";
 
 contract Gringotts is ERC20, ReentrancyGuard, Ownable {
+    /// @notice Libraries
     using SafeToken for address;
     using SafeMath for uint256;
 
-    event Deposit(address indexed user, uint256 share, uint256 value);
-    event Withdraw(address indexed user, uint256 share, uint256 value);
+    /// @notice Events
+    event AddDebt(uint256 indexed id, uint256 debtShare);
+    event RemoveDebt(uint256 indexed id, uint256 debtShare);
+    event Alohomora();
+    event Kedavra(uint256 indexed id, address indexed killer, uint256 prize, uint256 left);
 
     struct Position {
         address goblin;
@@ -32,16 +36,14 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
 
     /// @dev Require that the caller must be an EOA account to avoid flash loans.
     modifier onlyEOA() {
-        require(msg.sender == tx.origin, "!eoa");
+        require(msg.sender == tx.origin, "not eoa");
         _;
     }
 
     /// @dev Add more debt to the global debt pool.
     modifier accrue() {
         if (now > lastAccrueTime) {
-            uint256 timePast = now.sub(lastAccrueTime);
-            uint256 ratePerSec = config.getInterestRate();
-            uint256 interest = ratePerSec.mul(glbDebtVal).mul(timePast).div(1e18);
+            uint256 interest = pendingInterest();
             uint256 toReserve = interest.mul(config.getReservePoolBps()).div(10000);
             reservePool = reservePool.add(toReserve);
             glbDebtVal = glbDebtVal.add(interest);
@@ -55,14 +57,25 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         lastAccrueTime = now;
     }
 
-    /// @dev Return the ETH debt value given the debt share.
+    /// @dev Return the pending interest that will be accrued in the next call.
+    function pendingInterest() public view returns (uint256) {
+        if (now > lastAccrueTime) {
+            uint256 timePast = now.sub(lastAccrueTime);
+            uint256 ratePerSec = config.getInterestRate();
+            return ratePerSec.mul(glbDebtVal).mul(timePast).div(1e18);
+        } else {
+            return 0;
+        }
+    }
+
+    /// @dev Return the ETH debt value given the debt share. Be careful of unaccrued interests.
     /// @param debtShare The debt share to be converted.
     function debtShareToVal(uint256 debtShare) public view returns (uint256) {
         if (glbDebtShare == 0) return debtShare; // When there's no share, 1 share = 1 val.
         return debtShare.mul(glbDebtVal).div(glbDebtShare);
     }
 
-    /// @dev Return the debt share for the given debt value.
+    /// @dev Return the debt share for the given debt value. Be careful of unaccrued interests.
     /// @param debtVal The debt value to be converted.
     function debtValToShare(uint256 debtVal) public view returns (uint256) {
         if (glbDebtShare == 0) return debtVal; // When there's no share, 1 share = 1 val.
@@ -76,7 +89,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         return (Goblin(pos.goblin).health(id), debtShareToVal(pos.debtShare));
     }
 
-    /// @dev Return the total ETH entitied to the token holders.
+    /// @dev Return the total ETH entitied to the token holders. Be careful of unaccrued interests.
     function totalETH() public view returns (uint256) {
         return address(this).balance.add(glbDebtVal).sub(reservePool);
     }
@@ -86,14 +99,12 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         uint256 total = totalETH().sub(msg.value);
         uint256 share = total == 0 ? msg.value : msg.value.mul(totalSupply()).div(total);
         _mint(msg.sender, share);
-        emit Deposit(msg.sender, share, msg.value);
     }
 
     /// @dev Withdraw ETH from Gringotts by burning the share tokens.
     function reducio(uint256 share) external accrue nonReentrant {
         uint256 amount = share.mul(totalETH()).div(totalSupply());
         _burn(msg.sender, share);
-        emit Withdraw(msg.sender, share, amount);
         msg.sender.transfer(amount);
     }
 
@@ -108,39 +119,42 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         onlyEOA accrue nonReentrant
     {
         // 1. Sanity check the input ID, or add a new position of ID is 0.
+        Position storage pos = positions[id];
         if (id == 0) {
-            id = nextPositionID;
+            id = nextPositionID++;
+            pos = positions[id];
             positions[id].goblin = goblin;
             positions[id].owner = msg.sender;
-            nextPositionID++;
         } else {
-            require(id < nextPositionID, "!position.id");
+            require(id < nextPositionID, "bad position id");
+            pos = positions[id];
+            require(pos.goblin == goblin, "bad position goblin");
+            require(pos.owner == msg.sender, "not position owner");
         }
-        // 2.
-        Position storage pos = positions[id];
-        require(config.isWhiteListed(goblin), "!goblin.isWhiteListed");
-        require(pos.owner == msg.sender, "!position.owner");
-        require(pos.goblin == goblin, "!position.goblin");
-        // 2. Compute new position debt.
-        uint256 debt = _removeDebt(pos).add(loan);
-        // 3. Perform the actual work.
-        uint256 sendETH = msg.value.add(loan);
-        require(sendETH <= address(this).balance, "!eth.sufficient");
-        uint256 beforeETH = address(this).balance.sub(sendETH);
-        Goblin(pos.goblin).work.value(sendETH)(id, msg.sender, debt, data);
-        uint256 back = address(this).balance.sub(beforeETH);
-        // 4. Update position debt.
+        // 2. Make sure the goblin can accept more debt and remove the existing debt.
+        require(loan == 0 || config.acceptDebt(goblin), "goblin not accept more debt");
+        uint256 debt = _removeDebt(id).add(loan);
+        // 3. Perform the actual work, using a new scope to avoid stack-to-deep errors.
+        uint256 back;
+        {
+            uint256 sendETH = msg.value.add(loan);
+            require(sendETH <= address(this).balance, "insufficient ETH in the bank");
+            uint256 beforeETH = address(this).balance.sub(sendETH);
+            Goblin(goblin).work.value(sendETH)(id, msg.sender, debt, data);
+            back = address(this).balance.sub(beforeETH);
+        }
+        // 4. Check and update position debt.
         uint256 lessDebt = Math.min(debt, Math.min(back, maxReturn));
         debt = debt.sub(lessDebt);
-        // 5. Check position health. Only applicable with nonzero debt.
         if (debt > 0) {
-            require(debt >= config.minDebtSize(), "!minDebtSize");
-            // TODO: Check with goblin config.
+            require(debt >= config.minDebtSize(), "too small debt size");
+            uint256 health = Goblin(goblin).health(id);
+            require(health.mul(config.workFactor(goblin)) >= debt.mul(10000), "bad work factor");
+            _addDebt(id, debt);
         } else {
-            require(Goblin(pos.goblin).health(id) == 0, "!zero");
+            require(Goblin(goblin).health(id) == 0, "zero debt but nonzero health");
         }
-        _addDebt(pos, debt);
-        // 6. Return ETH back.
+        // 5. Return excess ETH back.
         if (back > lessDebt) SafeToken.safeTransferETH(msg.sender, back - lessDebt);
     }
 
@@ -150,9 +164,9 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         // 1. Verify that the position is eligible for liquidation.
         Position storage pos = positions[id];
         require(pos.debtShare > 0, "no debt");
-        uint256 debt = _removeDebt(pos);
+        uint256 debt = _removeDebt(id);
         uint256 health = Goblin(pos.goblin).health(id);
-        require(health.mul(config.liquidateFactor(pos.goblin)) < debt.mul(10000), "can't liquidate");
+        require(health.mul(config.killFactor(pos.goblin)) < debt.mul(10000), "can't liquidate");
         // 2. Perform liquidation and compute the amount of ETH received.
         uint256 beforeETH = address(this).balance;
         Goblin(pos.goblin).liquidate(id);
@@ -161,28 +175,38 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         uint256 rest = back.sub(prize);
         // 3. Clear position debt and return funds to liquidator and position owner.
         if (prize > 0) SafeToken.safeTransferETH(msg.sender, prize);
-        if (rest > debt) SafeToken.safeTransferETH(pos.owner, rest - debt);
+        uint256 left = rest > debt ? rest - debt : 0;
+        if (left > 0) SafeToken.safeTransferETH(pos.owner, left);
+        emit Kedavra(id, msg.sender, prize, left);
     }
 
     /// @dev Internal function to add the given debt value to the given position.
-    function _addDebt(Position storage pos, uint256 debtVal) internal {
+    function _addDebt(uint256 id, uint256 debtVal) internal {
+        Position storage pos = positions[id];
         uint256 debtShare = debtValToShare(debtVal);
         pos.debtShare = pos.debtShare.add(debtShare);
         glbDebtShare = glbDebtShare.add(debtShare);
         glbDebtVal = glbDebtVal.add(debtVal);
+        emit AddDebt(id, debtShare);
     }
 
     /// @dev Internal function to clear the debt of the given position. Return the debt value.
-    function _removeDebt(Position storage pos) internal returns (uint256) {
+    function _removeDebt(uint256 id) internal returns (uint256) {
+        Position storage pos = positions[id];
         uint256 debtShare = pos.debtShare;
-        uint256 debtVal = debtShareToVal(debtShare);
-        pos.debtShare = 0;
-        glbDebtShare = glbDebtShare.sub(debtShare);
-        glbDebtVal = glbDebtVal.sub(debtVal);
-        return debtVal;
+        if (debtShare > 0) {
+            uint256 debtVal = debtShareToVal(debtShare);
+            pos.debtShare = 0;
+            glbDebtShare = glbDebtShare.sub(debtShare);
+            glbDebtVal = glbDebtVal.sub(debtVal);
+            emit RemoveDebt(id, debtShare);
+            return debtVal;
+        } else {
+            return 0;
+        }
     }
 
-    /// @dev Update pool configuration to a new address. Must only be called by owner.
+    /// @dev Update bank configuration to a new address. Must only be called by owner.
     /// @param _config The new configurator address.
     function updateConfig(GringottsConfig _config) external onlyOwner {
         config = _config;

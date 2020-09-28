@@ -47,7 +47,7 @@ contract('StrategyLiquidate', ([deployer, alice, bob]) => {
           from: bob,
         }
       ),
-      '!minETH'
+      'insufficient ETH received'
     );
     // Bob uses liquidate strategy to turn all LPs back to ETH with a sane minimum value
     await this.strat.execute(

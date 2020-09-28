@@ -58,8 +58,9 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       this.liqStrat.address,
       '100'
     );
-    await this.config.setWhiteListed(this.goblin.address, true);
-    await this.config.setLiquidateFactor(this.goblin.address, '8000');
+    await this.config.setAcceptDebt(this.goblin.address, true);
+    await this.config.setWorkFactor(this.goblin.address, '7000');
+    await this.config.setKillFactor(this.goblin.address, '8000');
     // Deployer adds 1e17 MOCK + 1e18 WEI
     await this.token.approve(this.router.address, web3.utils.toWei('0.1', 'ether'));
     await this.router.addLiquidityETH(
@@ -114,7 +115,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
         ),
         { value: web3.utils.toWei('1', 'ether'), from: alice }
       ),
-      '!eth.sufficient'
+      'insufficient ETH in the bank'
     );
     // Deployer deposits 3 ETH to the bank
     await this.bank.engorgio({ value: web3.utils.toWei('3', 'ether') });

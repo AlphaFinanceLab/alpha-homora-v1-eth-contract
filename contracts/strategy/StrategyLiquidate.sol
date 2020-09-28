@@ -43,7 +43,7 @@ contract StrategyLiquidate is Ownable, ReentrancyGuard, Strategy {
         router.swapExactTokensForETH(fToken.myBalance(), 0, path, address(this), now);
         // 4. Return all ETH back to the original caller.
         uint256 balance = address(this).balance;
-        require(balance >= minETH, "!minETH");
+        require(balance >= minETH, "insufficient ETH received");
         SafeToken.safeTransferETH(msg.sender, balance);
     }
 

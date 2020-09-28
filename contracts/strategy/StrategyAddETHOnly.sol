@@ -51,7 +51,7 @@ contract StrategyAllETHOnly is Ownable, ReentrancyGuard, Strategy {
         (,, uint256 moreLPAmount) = router.addLiquidityETH.value(address(this).balance)(
             fToken, fToken.myBalance(), 0, 0, address(this), now
         );
-        require(moreLPAmount >= minLPAmount, "!minLPAmount");
+        require(moreLPAmount >= minLPAmount, "insufficient LP tokens received");
         lpToken.transfer(msg.sender, lpToken.balanceOf(address(this)));
     }
 

@@ -12,14 +12,17 @@ import "./SafeToken.sol";
 import "./Goblin.sol";
 
 contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
+    /// @notice Libraries
     using SafeToken for address;
     using SafeMath for uint256;
 
+    /// @notice Events
     event Reinvest(address indexed caller, uint256 reward);
     event AddShare(uint256 indexed id, uint256 share);
     event RemoveShare(uint256 indexed id, uint256 share);
     event Liquidate(uint256 indexed id, uint256 wad);
 
+    /// @notice Immutable variables
     IStakingRewards public staking;
     IUniswapV2Factory public factory;
     IUniswapV2Router02 public router;
@@ -29,11 +32,12 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     address public uni;
     address public operator;
 
-    Strategy addStrat;
-    Strategy liqStrat;
-
+    /// @notice Mutable state variables
     mapping(uint256 => uint256) shares;
+    mapping(address => bool) okStrats;
     uint256 public totalShare;
+    Strategy public addStrat;
+    Strategy public liqStrat;
     uint256 public reinvestBountyBps;
 
     constructor(
@@ -56,6 +60,8 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         uni = _uni;
         addStrat = _addStrat;
         liqStrat = _liqStrat;
+        okStrats[address(addStrat)] = true;
+        okStrats[address(liqStrat)] = true;
         reinvestBountyBps = _reinvestBountyBps;
         lpToken.approve(address(_staking), uint256(-1)); // 100% trust in the staking pool
         lpToken.approve(address(router), uint256(-1)); // 100% trust in the router
@@ -125,6 +131,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         _removeShare(id);
         // 2. Perform the worker strategy; sending LP tokens + ETH; expecting LP tokens + ETH.
         (address strat, bytes memory ext) = abi.decode(data, (address, bytes));
+        require(okStrats[strat], "unapproved work strategy");
         lpToken.transfer(strat, lpToken.balanceOf(address(this)));
         Strategy(strat).execute.value(msg.value)(user, debt, ext);
         // 3. Add LP tokens back to the farming pool.
@@ -211,6 +218,21 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @param _reinvestBountyBps The bounty value to update.
     function setReinvestBountyBps(uint256 _reinvestBountyBps) external onlyOwner {
         reinvestBountyBps = _reinvestBountyBps;
+    }
+
+    /// @dev Set the given strategy's approval status.
+    /// @param strat The strategy address.
+    /// @param isOk Whether to approve or unapprove the given strategy.
+    function setStrategyOk(address strat, bool isOk) external onlyOwner {
+        okStrats[strat] = isOk;
+    }
+
+    /// @dev Update critical strategy smart contracts. EMERGENCY ONLY. Bad strategies can steal funds.
+    /// @param _addStrat The new add strategy contract.
+    /// @param _liqStrat The new liquidate strategy contract.
+    function setCriticalStrategies(Strategy _addStrat, Strategy _liqStrat) external onlyOwner {
+        addStrat = _addStrat;
+        liqStrat = _liqStrat;
     }
 
     function() external payable {}
