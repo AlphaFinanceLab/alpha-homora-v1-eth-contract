@@ -19,6 +19,10 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     event Alohomora(uint256 indexed id, uint256 loan);
     event Kedavra(uint256 indexed id, address indexed killer, uint256 prize, uint256 left);
 
+    string public name = "GrinGotts ETH";
+    string public symbol = "gETH";
+    uint8 public decimals = 18;
+
     struct Position {
         address goblin;
         address owner;
