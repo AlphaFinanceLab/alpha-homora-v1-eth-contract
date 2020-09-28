@@ -162,5 +162,29 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     assert.equal('0', await this.bank.glbDebtVal());
     assertAlmostEqual('108000555555547491', await this.bank.reservePool());
     assertAlmostEqual('3972004999999927424', await this.bank.totalETH());
+    // Alice creates a new position again
+    await this.bank.alohomora(
+      0,
+      this.goblin.address,
+      web3.utils.toWei('1', 'ether'),
+      '0',
+      web3.eth.abi.encodeParameters(
+        ['address', 'bytes'],
+        [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+      ),
+      { value: web3.utils.toWei('1', 'ether'), from: alice }
+    );
+    // She can close position
+    await this.bank.alohomora(
+      2,
+      this.goblin.address,
+      '0',
+      '115792089237316195423570985008687907853269984665640564039457584007913129639935',
+      web3.eth.abi.encodeParameters(
+        ['address', 'bytes'],
+        [this.liqStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+      ),
+      { from: alice }
+    );
   });
 });

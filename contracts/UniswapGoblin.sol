@@ -187,11 +187,13 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @dev Internal function to stake all outstanding LP tokens to the given position ID.
     function _addShare(uint256 id) internal {
         uint256 balance = lpToken.balanceOf(address(this));
-        uint256 share = balanceToShare(balance);
-        staking.stake(balance);
-        shares[id] = shares[id].add(share);
-        totalShare = totalShare.add(share);
-        emit AddShare(id, share);
+        if (balance > 0) {
+            uint256 share = balanceToShare(balance);
+            staking.stake(balance);
+            shares[id] = shares[id].add(share);
+            totalShare = totalShare.add(share);
+            emit AddShare(id, share);
+        }
     }
 
     /// @dev Internal function to remove shares of the ID and convert to outstanding LP tokens.
