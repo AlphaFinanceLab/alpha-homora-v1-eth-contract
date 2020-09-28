@@ -9,6 +9,9 @@ import "./Goblin.sol";
 import "./SafeToken.sol";
 
 contract Gringotts is ERC20, ReentrancyGuard, Ownable {
+    event Deposit(address indexed user, uint256 share, uint256 value);
+    event Withdrawal(address indexed user, uint256 share, uint256 value);
+
     using SafeToken for address;
     using SafeMath for uint256;
 
@@ -19,7 +22,8 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     }
 
     GringottsConfig public config;
-    Position[] public positions;
+    mapping (uint256 => Position) public positions;
+    uint256 public nextPositionID = 1;
 
     uint256 public glbDebtShare;
     uint256 public glbDebtVal;
@@ -35,7 +39,6 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @dev Add more debt to the global debt pool.
     modifier accrue() {
         if (now > lastAccrueTime) {
-            config.poke();
             uint256 timePast = now.sub(lastAccrueTime);
             uint256 ratePerSec = config.getInterestRate();
             uint256 interest = ratePerSec.mul(glbDebtVal).mul(timePast).div(1e18);
@@ -66,30 +69,36 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         return debtVal.mul(glbDebtShare).div(glbDebtVal);
     }
 
+    /// @dev Return ETH value and debt of the given position. Be careful of unaccrued interests.
+    /// @param id The position ID to query.
+    function positionInfo(uint256 id) public view returns (uint256, uint256) {
+        Position storage pos = positions[id];
+        return (Goblin(pos.goblin).health(id), debtShareToVal(pos.debtShare));
+    }
+
     /// @dev Return the total ETH entitied to the token holders.
     function totalETH() public view returns (uint256) {
         return address(this).balance.add(glbDebtVal).sub(reservePool);
     }
 
     /// @dev Add more ETH to Gringotts. Hope to get some good returns.
-    function deposit() external payable accrue nonReentrant {
+    function engorgio() external payable accrue nonReentrant {
         uint256 total = totalETH().sub(msg.value);
-        if (total == 0) {
-            _mint(msg.sender, msg.value);
-        } else {
-            _mint(msg.sender, msg.value.mul(totalSupply()).div(total));
-        }
+        uint256 share = total == 0 ? msg.value : msg.value.mul(totalSupply()).div(total);
+        _mint(msg.sender, share);
+        emit Deposit(msg.sender, share, msg.value);
     }
 
     /// @dev Withdraw ETH from Gringotts by burning the share tokens.
-    function withdraw(uint256 share) external accrue nonReentrant {
+    function reducio(uint256 share) external accrue nonReentrant {
         uint256 amount = share.mul(totalETH()).div(totalSupply());
         _burn(msg.sender, share);
+        emit Withdrawal(msg.sender, share, amount);
         msg.sender.transfer(amount);
     }
 
     /// @dev Create a new farming position to unlock your yield farming potential.
-    /// @param id The ID of the position to unlock the earning. Use MAX_UINT for new position.
+    /// @param id The ID of the position to unlock the earning. Use ZERO for new position.
     /// @param goblin The address of the authorized goblin to work for this position.
     /// @param loan The amount of ETH to borrow from the pool.
     /// @param maxReturn The max amount of ETH to return to the pool.
@@ -98,12 +107,14 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         external payable
         onlyEOA accrue nonReentrant
     {
-        // 1. Sanity check the input ID, or add a new position of ID is MAX_UINT.
-        if (id == uint256(-1)) {
-            id = positions.length;
-            positions.push(Position({goblin: goblin, owner: msg.sender, debtShare: 0}));
+        // 1. Sanity check the input ID, or add a new position of ID is 0.
+        if (id == 0) {
+            id = nextPositionID;
+            positions[id].goblin = goblin;
+            positions[id].owner = msg.sender;
+            nextPositionID++;
         } else {
-            require(id < positions.length, "!position.id");
+            require(id < nextPositionID, "!position.id");
         }
         // 2.
         Position storage pos = positions[id];
@@ -113,8 +124,10 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         // 2. Compute new position debt.
         uint256 debt = _removeDebt(pos).add(loan);
         // 3. Perform the actual work.
-        uint256 beforeETH = address(this).balance;
-        Goblin(pos.goblin).work.value(msg.value.add(loan))(id, msg.sender, debt, data);
+        uint256 sendETH = msg.value.add(loan);
+        require(sendETH <= address(this).balance, "!eth.sufficient");
+        uint256 beforeETH = address(this).balance.sub(sendETH);
+        Goblin(pos.goblin).work.value(sendETH)(id, msg.sender, debt, data);
         uint256 back = address(this).balance.sub(beforeETH);
         // 4. Update position debt.
         uint256 lessDebt = Math.min(debt, Math.min(back, maxReturn));
@@ -123,6 +136,8 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         if (debt > 0) {
             require(debt >= config.minDebtSize(), "!minDebtSize");
             // TODO: Check with goblin config.
+        } else {
+            require(Goblin(pos.goblin).health(id) == 0, "!zero");
         }
         _addDebt(pos, debt);
         // 6. Return ETH back.
@@ -133,11 +148,11 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @param id The position ID to be killed.
     function kedavra(uint256 id) external onlyEOA accrue nonReentrant {
         // 1. Verify that the position is eligible for liquidation.
-        require(id < positions.length, "!position.id");
         Position storage pos = positions[id];
+        require(pos.debtShare > 0, "no debt");
         uint256 debt = _removeDebt(pos);
         uint256 health = Goblin(pos.goblin).health(id);
-        require(health.mul(10000) < debt.mul(config.liquidateFactor(pos.goblin)), "!liquidate");
+        require(health.mul(config.liquidateFactor(pos.goblin)) < debt.mul(10000), "can't liquidate");
         // 2. Perform liquidation and compute the amount of ETH received.
         uint256 beforeETH = address(this).balance;
         Goblin(pos.goblin).liquidate(id);

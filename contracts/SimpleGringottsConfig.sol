@@ -23,7 +23,6 @@ contract SimpleGringottsConfig is GringottsConfig, Ownable {
         getKedavraBps = _kedavraBps;
     }
 
-    function poke() external {}
     function setMinDebtSize(uint256 val) external onlyOwner { minDebtSize = val; }
     function setInterestRate(uint256 val) external onlyOwner { getInterestRate = val; }
     function setReservePoolBps(uint256 val) external onlyOwner { getReservePoolBps = val; }

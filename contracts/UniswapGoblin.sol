@@ -29,6 +29,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
 
     mapping(uint256 => uint256) shares;
     uint256 public totalShare;
+    uint256 public reinvestBountyBps;
 
     constructor(
         address _operator,
@@ -37,7 +38,8 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         address _fToken,
         address _uni,
         Strategy _addStrat,
-        Strategy _liqStrat
+        Strategy _liqStrat,
+        uint256 _reinvestBountyBps
     ) public {
         operator = _operator;
         weth = _router.WETH();
@@ -49,6 +51,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         uni = _uni;
         addStrat = _addStrat;
         liqStrat = _liqStrat;
+        reinvestBountyBps = _reinvestBountyBps;
         lpToken.approve(address(_staking), uint256(-1)); // 100% trust in the staking pool
         lpToken.approve(address(router), uint256(-1)); // 100% trust in the router
         _fToken.safeApprove(address(router), uint256(-1)); // 100% trust in the router
@@ -86,16 +89,19 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     function reinvest() public onlyEOA nonReentrant {
         // 1. Withdraw all the rewards.
         staking.getReward();
-        uint256 rewardBalance = uni.myBalance();
-        if (rewardBalance == 0) return;
-        // 2. Convert all the rewards to ETH.
+        uint256 reward = uni.myBalance();
+        if (reward == 0) return;
+        // 2. Send 0.5% reward bounty to the caller.
+        uint256 bounty = reward.mul(reinvestBountyBps) / 10000;
+        uni.safeTransfer(msg.sender, bounty);
+        // 3. Convert all the remaining rewards to ETH.
         address[] memory path = new address[](2);
         path[0] = address(uni);
         path[1] = address(weth);
-        router.swapExactTokensForETH(rewardBalance, 0, path, address(this), now);
-        // 3. Use add ETH strategy to convert all ETH to LP tokens.
+        router.swapExactTokensForETH(reward.sub(bounty), 0, path, address(this), now);
+        // 4. Use add ETH strategy to convert all ETH to LP tokens.
         addStrat.execute.value(address(this).balance)(address(0), 0, abi.encode(fToken, 0));
-        // 4. Mint more LP tokens and stake them for more rewards.
+        // 5. Mint more LP tokens and stake them for more rewards.
         staking.stake(lpToken.balanceOf(address(this)));
     }
 
@@ -125,7 +131,8 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @param rIn the amount of asset in reserve for input.
     /// @param rOut The amount of asset in reserve for output.
     function getMktSellAmount(uint256 aIn, uint256 rIn, uint256 rOut) public pure returns (uint256) {
-        require(aIn > 0 && rIn > 0 && rOut > 0, "!getAmountOut");
+        if (aIn == 0) return 0;
+        require(rIn > 0 && rOut > 0, "!getAmountOut");
         uint256 aInWithFee = aIn.mul(997);
         uint256 numerator = aInWithFee.mul(rOut);
         uint256 denominator = rIn.mul(1000).add(aInWithFee);
@@ -156,7 +163,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         // 1. Convert the position back to LP tokens and use liquidate strategy.
         _removeShare(id);
         lpToken.transfer(address(liqStrat), lpToken.balanceOf(address(this)));
-        liqStrat.execute(address(0), 0, abi.encode(fToken));
+        liqStrat.execute(address(0), 0, abi.encode(fToken, 0));
         // 2. Return all available ETH back to the operator.
         SafeToken.safeTransferETH(msg.sender, address(this).balance);
     }
@@ -187,6 +194,12 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @param value The number of tokens to transfer to `to`.
     function recover(address token, address to, uint256 value) external onlyOwner nonReentrant {
         token.safeTransfer(to, value);
+    }
+
+    /// @dev Set the reward bounty for calling reinvest operations.
+    /// @param _reinvestBountyBps The bounty value to update.
+    function setReinvestBountyBps(uint256 _reinvestBountyBps) external onlyOwner {
+        reinvestBountyBps = _reinvestBountyBps;
     }
 
     function() external payable {}

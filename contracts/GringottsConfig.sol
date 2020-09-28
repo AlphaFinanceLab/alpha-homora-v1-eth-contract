@@ -1,9 +1,6 @@
 pragma solidity 0.5.16;
 
 interface GringottsConfig {
-    /// @dev Poke the config pool to update its internal state.
-    function poke() external;
-
     /// @dev Return minimum ETH debt size per position.
     function minDebtSize() external view returns (uint256);
 
