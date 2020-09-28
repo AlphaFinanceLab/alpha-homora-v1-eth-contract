@@ -1,12 +1,12 @@
 pragma solidity 0.5.16;
 import "openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol";
+import "openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol";
 import "openzeppelin-solidity-2.3.0/contracts/utils/ReentrancyGuard.sol";
 import "synthetix/contracts/interfaces/IStakingRewards.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-core/contracts/libraries/Math.sol";
 import "./uniswap/IUniswapV2Router02.sol";
-import "./uniswap/UniswapV2Library.sol";
 import "./strategy/Strategy.sol";
 import "./SafeToken.sol";
 import "./Goblin.sol";
