@@ -41,9 +41,9 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     }
 
     /// @dev Add more debt to the global debt pool.
-    modifier accrue() {
+    modifier accrue(uint256 msgValue) {
         if (now > lastAccrueTime) {
-            uint256 interest = pendingInterest();
+            uint256 interest = pendingInterest(msgValue);
             uint256 toReserve = interest.mul(config.getReservePoolBps()).div(10000);
             reservePool = reservePool.add(toReserve);
             glbDebtVal = glbDebtVal.add(interest);
@@ -58,10 +58,12 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     }
 
     /// @dev Return the pending interest that will be accrued in the next call.
-    function pendingInterest() public view returns (uint256) {
+    /// @param msgValue Balance value to subtract off address(this).balance when called from payable functions.
+    function pendingInterest(uint256 msgValue) public view returns (uint256) {
         if (now > lastAccrueTime) {
             uint256 timePast = now.sub(lastAccrueTime);
-            uint256 ratePerSec = config.getInterestRate();
+            uint256 balance = address(this).balance.sub(msgValue);
+            uint256 ratePerSec = config.getInterestRate(glbDebtVal, balance);
             return ratePerSec.mul(glbDebtVal).mul(timePast).div(1e18);
         } else {
             return 0;
@@ -95,14 +97,14 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     }
 
     /// @dev Add more ETH to Gringotts. Hope to get some good returns.
-    function engorgio() external payable accrue nonReentrant {
+    function engorgio() external payable accrue(msg.value) nonReentrant {
         uint256 total = totalETH().sub(msg.value);
         uint256 share = total == 0 ? msg.value : msg.value.mul(totalSupply()).div(total);
         _mint(msg.sender, share);
     }
 
     /// @dev Withdraw ETH from Gringotts by burning the share tokens.
-    function reducio(uint256 share) external accrue nonReentrant {
+    function reducio(uint256 share) external accrue(0) nonReentrant {
         uint256 amount = share.mul(totalETH()).div(totalSupply());
         _burn(msg.sender, share);
         msg.sender.transfer(amount);
@@ -116,7 +118,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @param data The calldata to pass along to the goblin for more working context.
     function alohomora(uint256 id, address goblin, uint256 loan, uint256 maxReturn, bytes calldata data)
         external payable
-        onlyEOA accrue nonReentrant
+        onlyEOA accrue(msg.value) nonReentrant
     {
         // 1. Sanity check the input position, or add a new position of ID is 0.
         Position storage pos = positions[id];
@@ -161,7 +163,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
 
     /// @dev *Avada Kedavra* Cast the killing curse to the position. Liquidate it immediately.
     /// @param id The position ID to be killed.
-    function kedavra(uint256 id) external onlyEOA accrue nonReentrant {
+    function kedavra(uint256 id) external onlyEOA accrue(0) nonReentrant {
         // 1. Verify that the position is eligible for liquidation.
         Position storage pos = positions[id];
         require(pos.debtShare > 0, "no debt");
