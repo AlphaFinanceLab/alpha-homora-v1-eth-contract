@@ -44,7 +44,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       web3.utils.toWei('1', 'ether'), // 1 ETH min debt size
       '3472222222222', // 30% per year
       '1000', // 10% reserve pool
-      '100' // 1% Kedavra prize
+      '1000' // 10% Kedavra prize
     );
     this.bank = await Gringotts.new(this.config.address);
     this.staking = await MockStakingRewards.new(deployer, deployer, this.uni.address, this.lp.address);
@@ -152,7 +152,10 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     await time.increase(time.duration.days(1));
     await this.bank.engorgio(); // Random action to trigger interest computation
     assertAlmostEqual('3972004999999927424', await this.bank.totalETH());
+    assertAlmostEqual('99988133540000000000', await web3.eth.getBalance(eve));
+    // Now you can liquidate because of the insane interest rate
     await this.bank.kedavra('1', { from: eve });
+    assertAlmostEqual('100237911439637267843', await web3.eth.getBalance(eve));
     assertAlmostEqual('4079999999999919360', await web3.eth.getBalance(this.bank.address));
     assert.equal('0', await this.bank.glbDebtVal());
     assertAlmostEqual('108000555555547491', await this.bank.reservePool());

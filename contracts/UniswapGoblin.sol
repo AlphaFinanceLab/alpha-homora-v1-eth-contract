@@ -15,6 +15,11 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     using SafeToken for address;
     using SafeMath for uint256;
 
+    event Reinvest(address indexed caller, uint256 reward);
+    event AddShare(uint256 indexed id, uint256 share);
+    event RemoveShare(uint256 indexed id, uint256 share);
+    event Liquidate(uint256 indexed id, uint256 wad);
+
     IStakingRewards public staking;
     IUniswapV2Factory public factory;
     IUniswapV2Router02 public router;
@@ -60,12 +65,13 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
 
     /// @dev Require that the caller must be an EOA account to avoid flash loans.
     modifier onlyEOA() {
-        require(msg.sender == tx.origin, "!eoa");
+        require(msg.sender == tx.origin, "not eoa");
         _;
     }
 
+    /// @dev Require that the caller must be the operator (the bank).
     modifier onlyOperator() {
-        require(msg.sender == operator, "!operator");
+        require(msg.sender == operator, "not operator");
         _;
     }
 
@@ -103,6 +109,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         addStrat.execute.value(address(this).balance)(address(0), 0, abi.encode(fToken, 0));
         // 5. Mint more LP tokens and stake them for more rewards.
         staking.stake(lpToken.balanceOf(address(this)));
+        emit Reinvest(msg.sender, reward);
     }
 
     /// @dev Work on the given position. Must be called by the operator.
@@ -132,7 +139,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @param rOut The amount of asset in reserve for output.
     function getMktSellAmount(uint256 aIn, uint256 rIn, uint256 rOut) public pure returns (uint256) {
         if (aIn == 0) return 0;
-        require(rIn > 0 && rOut > 0, "!getAmountOut");
+        require(rIn > 0 && rOut > 0, "bad reserve values");
         uint256 aInWithFee = aIn.mul(997);
         uint256 numerator = aInWithFee.mul(rOut);
         uint256 denominator = rIn.mul(1000).add(aInWithFee);
@@ -165,7 +172,9 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         lpToken.transfer(address(liqStrat), lpToken.balanceOf(address(this)));
         liqStrat.execute(address(0), 0, abi.encode(fToken, 0));
         // 2. Return all available ETH back to the operator.
-        SafeToken.safeTransferETH(msg.sender, address(this).balance);
+        uint256 wad = address(this).balance;
+        SafeToken.safeTransferETH(msg.sender, wad);
+        emit Liquidate(id, wad);
     }
 
     /// @dev Internal function to stake all outstanding LP tokens to the given position ID.
@@ -175,6 +184,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         staking.stake(balance);
         shares[id] = shares[id].add(share);
         totalShare = totalShare.add(share);
+        emit AddShare(id, share);
     }
 
     /// @dev Internal function to remove shares of the ID and convert to outstanding LP tokens.
@@ -185,6 +195,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
             staking.withdraw(balance);
             totalShare = totalShare.sub(share);
             shares[id] = 0;
+            emit RemoveShare(id, share);
         }
     }
 

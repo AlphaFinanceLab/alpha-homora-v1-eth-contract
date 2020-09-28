@@ -9,11 +9,11 @@ import "./Goblin.sol";
 import "./SafeToken.sol";
 
 contract Gringotts is ERC20, ReentrancyGuard, Ownable {
-    event Deposit(address indexed user, uint256 share, uint256 value);
-    event Withdrawal(address indexed user, uint256 share, uint256 value);
-
     using SafeToken for address;
     using SafeMath for uint256;
+
+    event Deposit(address indexed user, uint256 share, uint256 value);
+    event Withdraw(address indexed user, uint256 share, uint256 value);
 
     struct Position {
         address goblin;
@@ -93,7 +93,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     function reducio(uint256 share) external accrue nonReentrant {
         uint256 amount = share.mul(totalETH()).div(totalSupply());
         _burn(msg.sender, share);
-        emit Withdrawal(msg.sender, share, amount);
+        emit Withdraw(msg.sender, share, amount);
         msg.sender.transfer(amount);
     }
 
