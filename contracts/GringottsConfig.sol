@@ -13,6 +13,9 @@ interface GringottsConfig {
     /// @dev Return the bps rate for Avada Kedavra caster.
     function getKedavraBps() external view returns (uint256);
 
+    /// @dev Return whether the given address is a goblin.
+    function isGoblin(address goblin) external view returns (bool);
+
     /// @dev Return whether the given goblin accepts more debt. Revert on non-goblin.
     function acceptDebt(address goblin) external view returns (bool);
 

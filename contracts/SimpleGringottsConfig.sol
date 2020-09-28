@@ -7,6 +7,7 @@ contract SimpleGringottsConfig is Ownable {
     uint256 public interestRate;
     uint256 public getReservePoolBps;
     uint256 public getKedavraBps;
+    mapping (address => bool) public isGoblin;
     mapping (address => bool) public acceptDebt;
     mapping (address => uint256) public workFactor;
     mapping (address => uint256) public killFactor;
@@ -31,6 +32,7 @@ contract SimpleGringottsConfig is Ownable {
     function setInterestRate(uint256 val) external onlyOwner { interestRate = val; }
     function setReservePoolBps(uint256 val) external onlyOwner { getReservePoolBps = val; }
     function setKedavraBps(uint256 val) external onlyOwner { getKedavraBps = val; }
+    function setIsGoblin(address addr, bool val) external onlyOwner{ isGoblin[addr] = val; }
     function setAcceptDebt(address addr, bool val) external onlyOwner{ acceptDebt[addr] = val; }
     function setWorkFactor(address addr, uint256 val) external onlyOwner{ workFactor[addr] = val; }
     function setKillFactor(address addr, uint256 val) external onlyOwner{ killFactor[addr] = val; }

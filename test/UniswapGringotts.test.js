@@ -58,6 +58,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       this.liqStrat.address,
       '100'
     );
+    await this.config.setIsGoblin(this.goblin.address, true);
     await this.config.setAcceptDebt(this.goblin.address, true);
     await this.config.setWorkFactor(this.goblin.address, '7000');
     await this.config.setKillFactor(this.goblin.address, '8000');

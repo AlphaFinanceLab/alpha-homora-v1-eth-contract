@@ -136,6 +136,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         }
         emit Alohomora(id, loan);
         // 2. Make sure the goblin can accept more debt and remove the existing debt.
+        require(config.isGoblin(goblin), "not a goblin");
         require(loan == 0 || config.acceptDebt(goblin), "goblin not accept more debt");
         uint256 debt = _removeDebt(id).add(loan);
         // 3. Perform the actual work, using a new scope to avoid stack-too-deep errors.
