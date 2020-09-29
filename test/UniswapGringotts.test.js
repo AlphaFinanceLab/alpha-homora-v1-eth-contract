@@ -121,16 +121,20 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     // Deployer deposits 3 ETH to the bank
     await this.bank.engorgio({ value: web3.utils.toWei('3', 'ether') });
     // Now Alice can take 1 ETH loan + 1 ETH of her to create a new position
-    await this.bank.alohomora(
-      0,
-      this.goblin.address,
-      web3.utils.toWei('1', 'ether'),
-      '0',
-      web3.eth.abi.encodeParameters(
-        ['address', 'bytes'],
-        [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
-      ),
-      { value: web3.utils.toWei('1', 'ether'), from: alice }
+    console.log(
+      (
+        await this.bank.alohomora(
+          0,
+          this.goblin.address,
+          web3.utils.toWei('1', 'ether'),
+          '0',
+          web3.eth.abi.encodeParameters(
+            ['address', 'bytes'],
+            [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+          ),
+          { value: web3.utils.toWei('1', 'ether'), from: alice }
+        )
+      ).receipt.gasUsed
     );
     // Her position should have ~2 ETH health (minus some small trading fee)
     assert.equal('1997459271062521105', await this.goblin.health('1'));
@@ -163,16 +167,20 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     assertAlmostEqual('108000555555547491', await this.bank.reservePool());
     assertAlmostEqual('3972004999999927424', await this.bank.totalETH());
     // Alice creates a new position again
-    await this.bank.alohomora(
-      0,
-      this.goblin.address,
-      web3.utils.toWei('1', 'ether'),
-      '0',
-      web3.eth.abi.encodeParameters(
-        ['address', 'bytes'],
-        [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
-      ),
-      { value: web3.utils.toWei('1', 'ether'), from: alice }
+    console.log(
+      (
+        await this.bank.alohomora(
+          0,
+          this.goblin.address,
+          web3.utils.toWei('1', 'ether'),
+          '0',
+          web3.eth.abi.encodeParameters(
+            ['address', 'bytes'],
+            [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+          ),
+          { value: web3.utils.toWei('1', 'ether'), from: alice }
+        )
+      ).receipt.gasUsed
     );
     // She can close position
     await this.bank.alohomora(
