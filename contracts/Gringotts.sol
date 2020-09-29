@@ -154,7 +154,8 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         if (debt > 0) {
             require(debt >= config.minDebtSize(), "too small debt size");
             uint256 health = Goblin(goblin).health(id);
-            require(health.mul(config.workFactor(goblin)) >= debt.mul(10000), "bad work factor");
+            uint256 workFactor = config.workFactor(goblin, debt);
+            require(health.mul(workFactor) >= debt.mul(10000), "bad work factor");
             _addDebt(id, debt);
         } else {
             require(Goblin(goblin).health(id) == 0, "zero debt but nonzero health");
@@ -171,7 +172,8 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         require(pos.debtShare > 0, "no debt");
         uint256 debt = _removeDebt(id);
         uint256 health = Goblin(pos.goblin).health(id);
-        require(health.mul(config.killFactor(pos.goblin)) < debt.mul(10000), "can't liquidate");
+        uint256 killFactor = config.killFactor(pos.goblin, debt);
+        require(health.mul(killFactor) < debt.mul(10000), "can't liquidate");
         // 2. Perform liquidation and compute the amount of ETH received.
         uint256 beforeETH = address(this).balance;
         Goblin(pos.goblin).liquidate(id);

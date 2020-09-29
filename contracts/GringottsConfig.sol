@@ -19,9 +19,9 @@ interface GringottsConfig {
     /// @dev Return whether the given goblin accepts more debt. Revert on non-goblin.
     function acceptDebt(address goblin) external view returns (bool);
 
-    /// @dev Return the work factor for the given goblin, using 1e4 as denom. Revert on non-goblin.
-    function workFactor(address goblin) external view returns (uint256);
+    /// @dev Return the work factor for the goblin + ETH debt, using 1e4 as denom. Revert on non-goblin.
+    function workFactor(address goblin, uint256 debt) external view returns (uint256);
 
-    /// @dev Return the kill factor for the given goblin, using 1e4 as denom. Revert on non-goblin.
-    function killFactor(address goblin) external view returns (uint256);
+    /// @dev Return the kill factor for the goblin + ETH debt, using 1e4 as denom. Revert on non-goblin.
+    function killFactor(address goblin, uint256 debt) external view returns (uint256);
 }
