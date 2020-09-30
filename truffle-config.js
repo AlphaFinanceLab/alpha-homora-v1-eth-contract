@@ -95,4 +95,13 @@ module.exports = {
       },
     },
   },
+
+  // Verify contract on Etherscan
+  plugins: [
+    'truffle-plugin-verify'
+  ],
+
+  api_keys: {
+    etherscan: process.env.ETHERSCAN_API_KEY
+  }
 };
