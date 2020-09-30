@@ -7,7 +7,7 @@ import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 import "@uniswap/v2-core/contracts/libraries/Math.sol";
 import "./uniswap/IUniswapV2Router02.sol";
-import "./strategy/Strategy.sol";
+import "./Strategy.sol";
 import "./SafeToken.sol";
 import "./Goblin.sol";
 

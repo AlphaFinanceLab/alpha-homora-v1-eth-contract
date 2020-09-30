@@ -14,9 +14,9 @@ The repository contains the smart contracts of [AlphaHomora](https://homora.alph
 
 ### UniswapGoblin 🦄👺 ([code](./contracts/UniswapGoblin.sol))
 
-### StrategyAddETHOnly ⬆️Ξ ([code](./contracts/strategy/StrategyAddETHOnly.sol))
+### StrategyAddETHOnly ⬆️Ξ ([code](./contracts/StrategyAddETHOnly.sol))
 
-### StrategyLiquidate ⬇️Ξ ([code](./contracts/strategy/StrategyLiquidate.sol))
+### StrategyLiquidate ⬇️Ξ ([code](./contracts/StrategyLiquidate.sol))
 
 ## License
 
