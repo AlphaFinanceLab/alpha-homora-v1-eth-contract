@@ -195,4 +195,81 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       { from: alice }
     );
   });
+
+  it('should liquidate user position correctly', async () => {
+    // Bob deposits 20 ETH
+    await this.bank.engorgio({ value: web3.utils.toWei('20', 'ether'), from: bob });
+
+    // Position#1: Alice borrows 10 ETH loan
+    await this.bank.alohomora(
+      0,
+      this.goblin.address,
+      web3.utils.toWei('10', 'ether'),
+      '0', // max return = 0, don't return ETH to the debt
+      web3.eth.abi.encodeParameters(
+        ['address', 'bytes'],
+        [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+      ),
+      { value: web3.utils.toWei('10', 'ether'), from: alice }
+    );
+
+    await this.token.mint(deployer, web3.utils.toWei('100', 'ether'));
+    await this.token.approve(this.router.address, web3.utils.toWei('100', 'ether'));
+
+    // Price swing 10%
+    // Add more token to the pool equals to sqrt(10*((0.1)**2) / 9) - 0.1 = 0.005409255338945984, (0.1 is the balance of token in the pool)
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.005409255338945984', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+
+    // Price swing 20%
+    // Add more token to the pool equals to
+    // sqrt(10*((0.10540925533894599)**2) / 8) - 0.10540925533894599 = 0.012441874858811944
+    // (0.10540925533894599 is the balance of token in the pool)
+
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.012441874858811944', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+
+    // Price swing 23.43%
+    // Existing token on the pool = 0.10540925533894599 + 0.012441874858811944 = 0.11785113019775793
+    // Add more token to the pool equals to
+    // sqrt(10*((0.11785113019775793)**2) / 7.656999999999999) - 0.11785113019775793 = 0.016829279312591913
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.016829279312591913', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+
+    // Price swing 30%
+    // Existing token on the pool = 0.11785113019775793 + 0.016829279312591913 = 0.13468040951034985
+    // Add more token to the pool equals to
+    // sqrt(10*((0.13468040951034985)**2) / 7) - 0.13468040951034985 = 0.026293469053292218
+    const result = await this.lp.getReserves();
+    console.log("result", result[0].toString())
+    console.log("result", result[1].toString())
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.026293469053292218', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+
+    // Bob can kill alice's position
+    await this.bank.kedavra('1', { from: bob });
+  });
 });
