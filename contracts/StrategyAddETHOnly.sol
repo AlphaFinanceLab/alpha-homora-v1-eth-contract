@@ -47,6 +47,7 @@ contract StrategyAllETHOnly is Ownable, ReentrancyGuard, Strategy {
         path[1] = fToken;
         router.swapExactETHForTokens.value(aIn)(0, path, address(this), now);
         // 4. Mint more LP tokens and return all LP tokens to the sender.
+        fToken.safeApprove(address(router), 0);
         fToken.safeApprove(address(router), uint(-1));
         (,, uint256 moreLPAmount) = router.addLiquidityETH.value(address(this).balance)(
             fToken, fToken.myBalance(), 0, 0, address(this), now

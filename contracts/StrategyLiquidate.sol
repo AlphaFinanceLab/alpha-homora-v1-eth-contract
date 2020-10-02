@@ -39,6 +39,7 @@ contract StrategyLiquidate is Ownable, ReentrancyGuard, Strategy {
         address[] memory path = new address[](2);
         path[0] = fToken;
         path[1] = weth;
+        fToken.safeApprove(address(router), 0);
         fToken.safeApprove(address(router), uint256(-1));
         router.swapExactTokensForETH(fToken.myBalance(), 0, path, address(this), now);
         // 4. Return all ETH back to the original caller.
