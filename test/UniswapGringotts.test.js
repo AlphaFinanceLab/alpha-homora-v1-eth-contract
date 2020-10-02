@@ -197,7 +197,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     );
   });
 
-  it('Alice should deposit and withdraw eth to Gringotts (bad debt case)', async () => {
+  it('Should deposit and withdraw eth from Gringotts (bad debt case)', async () => {
     // Deployer deposits 10 ETH to the bank
     await this.bank.engorgio({ value: web3.utils.toWei('10', 'ether') });
     assertAlmostEqual('10000000000000000000', await this.bank.balanceOf(deployer));
