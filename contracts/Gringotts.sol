@@ -111,7 +111,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     function reducio(uint256 share) external accrue(0) nonReentrant {
         uint256 amount = share.mul(totalETH()).div(totalSupply());
         _burn(msg.sender, share);
-        msg.sender.transfer(amount);
+        SafeToken.safeTransferETH(msg.sender, amount);
     }
 
     /// @dev Create a new farming position to unlock your yield farming potential.
