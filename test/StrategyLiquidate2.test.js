@@ -8,19 +8,7 @@ const MockERC20 = artifacts.require('MockERC20');
 const FOREVER = '2000000000';
 const { expectRevert, BN } = require('@openzeppelin/test-helpers');
 
-// Assert that actual is less than 0.01% difference from expected
-function assertAlmostEqual(expected, actual) {
-  const expectedBN = BN.isBN(expected) ? expected : new BN(expected);
-  const actualBN = BN.isBN(actual) ? actual : new BN(actual);
-  const diffBN = expectedBN.gt(actualBN) ? expectedBN.sub(actualBN) : actualBN.sub(expectedBN);
-  return assert.ok(
-    diffBN.lt(expectedBN.div(new BN('10000'))),
-    `Not almost equal. Expected ${expectedBN.toString()}. Actual ${actualBN.toString()}`
-  );
-}
-
-
-contract.only('StrategyLiquidate2', ([deployer, alice, bob]) => {
+contract('StrategyLiquidate2', ([deployer, alice, bob]) => {
   beforeEach(async () => {
     this.factory = await MockUniswapV2Factory.new(deployer);
     this.weth = await WETH.new();
@@ -33,7 +21,7 @@ contract.only('StrategyLiquidate2', ([deployer, alice, bob]) => {
     this.strat = await StrategyLiquidate2.new(this.router.address);
   });
 
-  context("It should convert LP tokens and farming token", () => {
+  context('It should convert LP tokens and farming token', () => {
     beforeEach(async () => {
       // Alice adds 1e17 MOCK + 1e18 WEI
       await this.token.approve(this.router.address, '100000000000000000', { from: alice });
@@ -69,31 +57,90 @@ contract.only('StrategyLiquidate2', ([deployer, alice, bob]) => {
 
     it('should convert all LP tokens back to ETH and farming token (debt = received ETH)', async () => {
       const bobEthBefore = new BN(await web3.eth.getBalance(bob));
+      const bobTokenBefore = await this.token.balanceOf(bob);
       // Bob uses liquidate strategy to turn LPs back to ETH and farming token
       await this.strat.execute(
         bob,
         '1000000000000000000', // debt 1 ETH
-        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0', 'ether')]),
+        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
         {
           from: bob,
           gasPrice: 0,
         }
       );
       const bobEthAfter = new BN(await web3.eth.getBalance(bob));
+      const bobTokenAfter = await this.token.balanceOf(bob);
       assert.equal('0', await this.lp.balanceOf(this.strat.address));
       assert.equal('0', await this.lp.balanceOf(bob));
-      assert.equal('1000000000000000000', bobEthAfter.sub(bobEthBefore).toString());
-      assert.equal('1000000000000000000', await this.token.balanceOf(bob));
+      assert.equal('1000000000000000000', bobEthAfter.sub(bobEthBefore)); // 1 ETH
+      assert.equal('100000000000000000', bobTokenAfter.sub(bobTokenBefore)); // 0.1 farming token
     });
-  })
 
-  // it('should only allow owner to withdraw loss ERC20 tokens', async () => {
-  //   await this.token.transfer(this.strat.address, '100', { from: alice });
-  //   await expectRevert(
-  //     this.strat.recover(this.token.address, alice, '50', { from: alice }),
-  //     'Ownable: caller is not the owner'
-  //   );
-  //   await this.strat.recover(this.token.address, deployer, '50');
-  //   assert.equal('50', await this.token.balanceOf(deployer));
-  // });
+    it('should convert all LP tokens back to ETH and farming token (debt < received ETH)', async () => {
+      const bobEthBefore = new BN(await web3.eth.getBalance(bob));
+      const bobTokenBefore = await this.token.balanceOf(bob);
+      // Bob uses liquidate strategy to turn LPs back to ETH and farming token
+      await this.strat.execute(
+        bob,
+        '500000000000000000', // debt 0.5 ETH
+        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
+        {
+          from: bob,
+          gasPrice: 0,
+        }
+      );
+      const bobEthAfter = new BN(await web3.eth.getBalance(bob));
+      const bobTokenAfter = await this.token.balanceOf(bob);
+      assert.equal('0', await this.lp.balanceOf(this.strat.address));
+      assert.equal('0', await this.lp.balanceOf(bob));
+      assert.equal('1000000000000000000', bobEthAfter.sub(bobEthBefore)); // 1 ETH
+      assert.equal('100000000000000000', bobTokenAfter.sub(bobTokenBefore)); // 0.1 farming token
+    });
+
+    it('should convert all LP tokens back to ETH and farming token (debt > received ETH, farming token is enough to convert to ETH)', async () => {
+      const bobEthBefore = new BN(await web3.eth.getBalance(bob));
+      const bobTokenBefore = await this.token.balanceOf(bob);
+      // Bob uses liquidate strategy to turn LPs back to ETH and farming token
+      await this.strat.execute(
+        bob,
+        '1200000000000000000', // debt 1.2 ETH
+        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
+        {
+          from: bob,
+          gasPrice: 0,
+        }
+      );
+      const bobEthAfter = new BN(await web3.eth.getBalance(bob));
+      const bobTokenAfter = await this.token.balanceOf(bob);
+      assert.equal('0', await this.lp.balanceOf(this.strat.address));
+      assert.equal('0', await this.lp.balanceOf(bob));
+      assert.equal('1200000000000000000', bobEthAfter.sub(bobEthBefore)); // 1.2 ETH
+      assert.equal('74924774322968906', bobTokenAfter.sub(bobTokenBefore)); // 0.1 - 0.025 = 0.075 farming token
+    });
+
+    it('should revert (debt > received ETH, farming token is not enough to convert to ETH)', async () => {
+      await expectRevert(
+        this.strat.execute(
+          bob,
+          '2000000000000000000', // debt 2 ETH
+          web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
+          {
+            from: bob,
+            gasPrice: 0,
+          }
+        ),
+        'revert'
+      );
+    });
+  });
+
+  it('should only allow owner to withdraw loss ERC20 tokens', async () => {
+    await this.token.transfer(this.strat.address, '100', { from: alice });
+    await expectRevert(
+      this.strat.recover(this.token.address, alice, '50', { from: alice }),
+      'Ownable: caller is not the owner'
+    );
+    await this.strat.recover(this.token.address, deployer, '50');
+    assert.equal('50', await this.token.balanceOf(deployer));
+  });
 });
