@@ -50,8 +50,7 @@ contract StrategyLiquidate2 is Ownable, ReentrancyGuard, Strategy {
     if (debt > balance) {
       // Convert some farming tokens to ETH
       uint256 remaingDebt = debt.sub(balance);
-      uint256 maxEth = balance > remaingDebt ? remaingDebt : balance;
-      router.swapTokensForExactETH(maxEth, fToken.myBalance(), path, address(this), now);
+      router.swapTokensForExactETH(remaingDebt, fToken.myBalance(), path, address(this), now);
     }
     // 4. Return ETH back to the original caller.
     uint256 remainningBalance = address(this).balance;
