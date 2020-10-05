@@ -321,9 +321,6 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     // Existing token on the pool = 0.11785113019775793 + 0.016829279312591913 = 0.13468040951034985
     // Add more token to the pool equals to
     // sqrt(10*((0.13468040951034985)**2) / 7) - 0.13468040951034985 = 0.026293469053292218
-    const result = await this.lp.getReserves();
-    console.log('result', result[0].toString());
-    console.log('result', result[1].toString());
     await this.router.swapExactTokensForTokens(
       web3.utils.toWei('0.026293469053292218', 'ether'),
       '0',
