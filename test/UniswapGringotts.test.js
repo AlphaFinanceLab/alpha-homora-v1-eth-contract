@@ -341,10 +341,10 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     await this.goblin.setReinvestBountyBps('1000');
 
     // Bob deposits 10 ETH
-    await this.bank.engorgio({ value: web3.utils.toWei('10', 'ether'), from: bob });
+    await this.bank.engorgio({ value: web3.utils.toWei('10', 'ether'), from: bob, gasPrice: 0 });
 
     // Alice deposits 12 ETH
-    await this.bank.engorgio({ value: web3.utils.toWei('12', 'ether'), from: alice });
+    await this.bank.engorgio({ value: web3.utils.toWei('12', 'ether'), from: alice, gasPrice: 0 });
 
     // Position#1: Bob borrows 10 ETH loan
     await this.bank.alohomora(
@@ -356,7 +356,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
         ['address', 'bytes'],
         [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
       ),
-      { value: web3.utils.toWei('10', 'ether'), from: bob }
+      { value: web3.utils.toWei('10', 'ether'), from: bob, gasPrice: 0 }
     );
 
     // Position#2: Alice borrows 2 ETH loan
@@ -369,7 +369,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
         ['address', 'bytes'],
         [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
       ),
-      { value: web3.utils.toWei('1', 'ether'), from: alice }
+      { value: web3.utils.toWei('1', 'ether'), from: alice, gasPrice: 0 }
     );
 
     // ---------------- Reinvest#1 -------------------
@@ -460,12 +460,12 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
         ['address', 'bytes'],
         [this.liqStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
       ),
-      { from: bob }
+      { from: bob, gasPrice: 0 }
     );
     const bobAfter = new BN(await web3.eth.getBalance(bob));
 
     // Check Bob account
-    assertAlmostEqual('13027180594030338479', bobAfter.sub(bobBefore));
+    assertAlmostEqual('13037163593789687703', bobAfter.sub(bobBefore));
 
     // Alice add ETH again
     await this.bank.alohomora(
@@ -491,11 +491,11 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
         ['address', 'bytes'],
         [this.liqStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
       ),
-      { from: alice }
+      { from: alice, gasPrice: 0 }
     );
     const aliceAfter = new BN(await web3.eth.getBalance(alice));
-
+    
     // Check Alice account
-    assertAlmostEqual('8740008516666762843', aliceAfter.sub(aliceBefore));
+    assertAlmostEqual('8747417676666762843', aliceAfter.sub(aliceBefore));
   });
 });
