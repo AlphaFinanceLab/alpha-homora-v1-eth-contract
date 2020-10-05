@@ -1,6 +1,7 @@
 pragma solidity 0.5.16;
 import 'openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol';
 import 'openzeppelin-solidity-2.3.0/contracts/utils/ReentrancyGuard.sol';
+import 'openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol';
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol';
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol';
 import './uniswap/IUniswapV2Router02.sol';
@@ -9,6 +10,7 @@ import './Strategy.sol';
 
 contract StrategyLiquidate2 is Ownable, ReentrancyGuard, Strategy {
   using SafeToken for address;
+  using SafeMath for uint256;
 
   IUniswapV2Factory public factory;
   IUniswapV2Router02 public router;
@@ -43,11 +45,11 @@ contract StrategyLiquidate2 is Ownable, ReentrancyGuard, Strategy {
     path[1] = weth;
     fToken.safeApprove(address(router), 0);
     fToken.safeApprove(address(router), uint256(-1));
-    uint256 wEthbalance = weth.balanceOf(address(this)
+    uint256 wEthbalance = weth.balanceOf(address(this));
     if (debt > wEthbalance) {
       // Convert some farming tokens to ETH
       uint256 remaingDebt = debt.sub(wEthbalance);
-      uint256 maxEth =  wEthbalance > remaingDebt ? remaingDebt : wEthbalance;
+      uint256 maxEth = wEthbalance > remaingDebt ? remaingDebt : wEthbalance;
       router.swapExactTokensForETH(maxEth, 0, path, address(this), now);
     }
     // 4. Return ETH back to the original caller.
