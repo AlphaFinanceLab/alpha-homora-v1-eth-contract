@@ -13,11 +13,12 @@ const MockERC20 = artifacts.require('MockERC20');
 const FOREVER = '2000000000';
 const { expectRevert, time, BN } = require('@openzeppelin/test-helpers');
 const expectEvent = require('@openzeppelin/test-helpers/src/expectEvent');
+const { web3 } = require('@openzeppelin/test-helpers/src/setup');
 
 // Assert that actual is less than 0.01% difference from expected
 function assertAlmostEqual(expected, actual) {
-  const expectedBN = new BN(expected);
-  const actualBN = new BN(actual);
+  const expectedBN = BN.isBN(expected) ? expected : new BN(expected);
+  const actualBN = BN.isBN(actual) ? actual : new BN(actual);
   const diffBN = expectedBN.gt(actualBN) ? expectedBN.sub(actualBN) : actualBN.sub(expectedBN);
   return assert.ok(
     diffBN.lt(expectedBN.div(new BN('10000'))),
@@ -194,5 +195,144 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       ),
       { from: alice }
     );
+  });
+
+  it('Should deposit and withdraw eth from Gringotts (bad debt case)', async () => {
+    // Deployer deposits 10 ETH to the bank
+    await this.bank.engorgio({ value: web3.utils.toWei('10', 'ether') });
+    assertAlmostEqual('10000000000000000000', await this.bank.balanceOf(deployer));
+
+    // Bob borrows 2 ETH loan
+    await this.bank.alohomora(
+      0,
+      this.goblin.address,
+      web3.utils.toWei('2', 'ether'),
+      '0', // max return = 0, don't return ETH to the debt
+      web3.eth.abi.encodeParameters(
+        ['address', 'bytes'],
+        [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+      ),
+      { value: web3.utils.toWei('1', 'ether'), from: bob }
+    );
+    assertAlmostEqual('8000000000000000000', await web3.eth.getBalance(this.bank.address));
+    assertAlmostEqual('2000000000000000000', await this.bank.glbDebtVal());
+    assertAlmostEqual('10000000000000000000', await this.bank.totalETH());
+
+    // Alice deposits 2 ETH
+    await this.bank.engorgio({ value: web3.utils.toWei('2', 'ether'), from: alice });
+
+    // check Alice gETH balance = 2/10 * 10 = 2 gETH
+    assertAlmostEqual('2000000000000000000', await this.bank.balanceOf(alice));
+    assertAlmostEqual('12000000000000000000', await this.bank.totalSupply());
+
+    // Simulate ETH price is very high by swap fToken to ETH (reduce ETH supply)
+    await this.token.mint(deployer, web3.utils.toWei('100', 'ether'));
+    await this.token.approve(this.router.address, web3.utils.toWei('100', 'ether'));
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('100', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+    assertAlmostEqual('10000000000000000000', await web3.eth.getBalance(this.bank.address));
+
+    // Alice liquidates Bob position#1
+    let aliceBefore = new BN(await web3.eth.getBalance(alice));
+
+    await this.bank.kedavra(1, { from: alice, gasPrice: 0 });
+    let aliceAfter = new BN(await web3.eth.getBalance(alice));
+
+    // Bank balance is increase by liquidation
+    assertAlmostEqual('10002702699312215556', await web3.eth.getBalance(this.bank.address));
+
+    // Alice is liquidator, Alice should receive 10% Kedavra prize
+    // ETH back from liquidation 3002999235795062, 10% of 3002999235795062 is 300299923579506
+    assertAlmostEqual('300299923579506', aliceAfter.sub(aliceBefore));
+
+    // Alice withdraws 2 gETH
+    aliceBefore = new BN(await web3.eth.getBalance(alice));
+    await this.bank.reducio('2000000000000000000', { from: alice, gasPrice: 0 });
+    aliceAfter = new BN(await web3.eth.getBalance(alice));
+
+    // alice gots 2/12 * 10.002702699312215556 = 1.667117116552036
+    assertAlmostEqual('1667117116552036400', aliceAfter.sub(aliceBefore));
+  });
+
+  it('should liquidate user position correctly', async () => {
+    // Bob deposits 20 ETH
+    await this.bank.engorgio({ value: web3.utils.toWei('20', 'ether'), from: bob });
+
+    // Position#1: Alice borrows 10 ETH loan
+    await this.bank.alohomora(
+      0,
+      this.goblin.address,
+      web3.utils.toWei('10', 'ether'),
+      '0', // max return = 0, don't return ETH to the debt
+      web3.eth.abi.encodeParameters(
+        ['address', 'bytes'],
+        [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+      ),
+      { value: web3.utils.toWei('10', 'ether'), from: alice }
+    );
+
+    await this.token.mint(deployer, web3.utils.toWei('100', 'ether'));
+    await this.token.approve(this.router.address, web3.utils.toWei('100', 'ether'));
+
+    // Price swing 10%
+    // Add more token to the pool equals to sqrt(10*((0.1)**2) / 9) - 0.1 = 0.005409255338945984, (0.1 is the balance of token in the pool)
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.005409255338945984', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+
+    // Price swing 20%
+    // Add more token to the pool equals to
+    // sqrt(10*((0.10540925533894599)**2) / 8) - 0.10540925533894599 = 0.012441874858811944
+    // (0.10540925533894599 is the balance of token in the pool)
+
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.012441874858811944', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+
+    // Price swing 23.43%
+    // Existing token on the pool = 0.10540925533894599 + 0.012441874858811944 = 0.11785113019775793
+    // Add more token to the pool equals to
+    // sqrt(10*((0.11785113019775793)**2) / 7.656999999999999) - 0.11785113019775793 = 0.016829279312591913
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.016829279312591913', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+
+    // Price swing 30%
+    // Existing token on the pool = 0.11785113019775793 + 0.016829279312591913 = 0.13468040951034985
+    // Add more token to the pool equals to
+    // sqrt(10*((0.13468040951034985)**2) / 7) - 0.13468040951034985 = 0.026293469053292218
+    const result = await this.lp.getReserves();
+    console.log('result', result[0].toString());
+    console.log('result', result[1].toString());
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.026293469053292218', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
+
+    // Bob can kill alice's position
+    await this.bank.kedavra('1', { from: bob });
   });
 });
