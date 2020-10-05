@@ -207,16 +207,11 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       0,
       this.goblin.address,
       web3.utils.toWei('2', 'ether'),
-      { value: web3.utils.toWei('10', 'ether'), from: alice }
-    );
-
-    await this.token.mint(deployer, web3.utils.toWei('100', 'ether'));
-    await this.token.approve(this.router.address, web3.utils.toWei('100', 'ether'));
-
-    // Price swing 10%
-    // Add more token to the pool equals to sqrt(10*((0.1)**2) / 9) - 0.1 = 0.005409255338945984, (0.1 is the balance of token in the pool)
-    await this.router.swapExactTokensForTokens(
-      web3.utils.toWei('0.005409255338945984', 'ether'),
+      '0', // max return = 0, don't return ETH to the debt
+      web3.eth.abi.encodeParameters(
+        ['address', 'bytes'],
+        [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+      ),
       { value: web3.utils.toWei('1', 'ether'), from: bob }
     );
     assertAlmostEqual('8000000000000000000', await web3.eth.getBalance(this.bank.address));
@@ -278,7 +273,21 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
         ['address', 'bytes'],
         [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
       ),
+      { value: web3.utils.toWei('10', 'ether'), from: alice }
+    );
 
+    await this.token.mint(deployer, web3.utils.toWei('100', 'ether'));
+    await this.token.approve(this.router.address, web3.utils.toWei('100', 'ether'));
+
+    // Price swing 10%
+    // Add more token to the pool equals to sqrt(10*((0.1)**2) / 9) - 0.1 = 0.005409255338945984, (0.1 is the balance of token in the pool)
+    await this.router.swapExactTokensForTokens(
+      web3.utils.toWei('0.005409255338945984', 'ether'),
+      '0',
+      [this.token.address, this.weth.address],
+      deployer,
+      FOREVER
+    );
     await expectRevert(this.bank.kedavra('1'), "can't liquidate");
 
     // Price swing 20%
@@ -313,8 +322,8 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     // Add more token to the pool equals to
     // sqrt(10*((0.13468040951034985)**2) / 7) - 0.13468040951034985 = 0.026293469053292218
     const result = await this.lp.getReserves();
-    console.log("result", result[0].toString())
-    console.log("result", result[1].toString())
+    console.log('result', result[0].toString());
+    console.log('result', result[1].toString());
     await this.router.swapExactTokensForTokens(
       web3.utils.toWei('0.026293469053292218', 'ether'),
       '0',
