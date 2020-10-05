@@ -15,6 +15,7 @@ contract StrategyLiquidate2 is Ownable, ReentrancyGuard, Strategy {
   IUniswapV2Factory public factory;
   IUniswapV2Router02 public router;
   address public weth;
+  event Test(string key, uint256 value);
 
   /// @dev Create a new add ETH only strategy instance.
   /// @param _router The Uniswap router smart contract.
@@ -45,17 +46,17 @@ contract StrategyLiquidate2 is Ownable, ReentrancyGuard, Strategy {
     path[1] = weth;
     fToken.safeApprove(address(router), 0);
     fToken.safeApprove(address(router), uint256(-1));
-    uint256 wEthbalance = weth.balanceOf(address(this));
-    if (debt > wEthbalance) {
+    uint256 balance = address(this).balance;
+    if (debt > balance) {
       // Convert some farming tokens to ETH
-      uint256 remaingDebt = debt.sub(wEthbalance);
-      uint256 maxEth = wEthbalance > remaingDebt ? remaingDebt : wEthbalance;
-      router.swapExactTokensForETH(maxEth, 0, path, address(this), now);
+      uint256 remaingDebt = debt.sub(balance);
+      uint256 maxEth = balance > remaingDebt ? remaingDebt : balance;
+      router.swapTokensForExactETH(maxEth, fToken.myBalance(), path, address(this), now);
     }
     // 4. Return ETH back to the original caller.
-    uint256 balance = address(this).balance;
-    require(balance >= minETH, 'insufficient ETH received');
-    SafeToken.safeTransferETH(msg.sender, balance);
+    uint256 remainningBalance = address(this).balance;
+    require(remainningBalance >= minETH, 'insufficient ETH received');
+    SafeToken.safeTransferETH(msg.sender, remainningBalance);
     // 5. Return remaining farming tokens to user
     uint256 remainningFToken = fToken.myBalance();
     if (remainningFToken > 0) {
