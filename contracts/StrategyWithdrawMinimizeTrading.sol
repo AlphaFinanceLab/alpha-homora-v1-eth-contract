@@ -8,16 +8,15 @@ import './uniswap/IUniswapV2Router02.sol';
 import './SafeToken.sol';
 import './Strategy.sol';
 
-contract StrategyLiquidate2 is Ownable, ReentrancyGuard, Strategy {
+contract StrategyWithdrawMinimizeTrading is Ownable, ReentrancyGuard, Strategy {
   using SafeToken for address;
   using SafeMath for uint256;
 
   IUniswapV2Factory public factory;
   IUniswapV2Router02 public router;
   address public weth;
-  event Test(string key, uint256 value);
 
-  /// @dev Create a new add ETH only strategy instance.
+  /// @dev Create a new withdraw minimize trading strategy instance.
   /// @param _router The Uniswap router smart contract.
   constructor(IUniswapV2Router02 _router) public {
     factory = IUniswapV2Factory(_router.factory());
@@ -26,8 +25,8 @@ contract StrategyLiquidate2 is Ownable, ReentrancyGuard, Strategy {
   }
 
   /// @dev Execute worker strategy. Take LP tokens + ETH. Return LP tokens + ETH.
-  /// @param user User address of liquidated account
-  /// @param debt Debt amount in WAD of user account
+  /// @param user User address to withdraw liquidity.
+  /// @param debt Debt amount in WAD of the user.
   /// @param data Extra calldata information passed along to this strategy.
   function execute(
     address user,
@@ -53,13 +52,13 @@ contract StrategyLiquidate2 is Ownable, ReentrancyGuard, Strategy {
       router.swapTokensForExactETH(remaingDebt, fToken.myBalance(), path, address(this), now);
     }
     // 4. Return ETH back to the original caller.
-    uint256 remainningBalance = address(this).balance;
-    require(remainningBalance >= minETH, 'insufficient ETH received');
-    SafeToken.safeTransferETH(msg.sender, remainningBalance);
+    uint256 remainingBalance = address(this).balance;
+    require(remainingBalance >= minETH, 'insufficient ETH received');
+    SafeToken.safeTransferETH(msg.sender, remainingBalance);
     // 5. Return remaining farming tokens to user
-    uint256 remainningFToken = fToken.myBalance();
-    if (remainningFToken > 0) {
-      fToken.safeTransfer(user, remainningFToken);
+    uint256 remainingFToken = fToken.myBalance();
+    if (remainingFToken > 0) {
+      fToken.safeTransfer(user, remainingFToken);
     }
   }
 

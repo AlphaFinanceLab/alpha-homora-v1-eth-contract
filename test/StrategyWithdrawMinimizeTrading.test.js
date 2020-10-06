@@ -1,14 +1,14 @@
 const MockUniswapV2Factory = artifacts.require('MockUniswapV2Factory');
 const MockUniswapV2Pair = artifacts.require('MockUniswapV2Pair');
 const UniswapV2Router02 = artifacts.require('UniswapV2Router02');
-const StrategyLiquidate2 = artifacts.require('StrategyLiquidate2');
+const StrategyWithdrawMinimizeTrading = artifacts.require('StrategyWithdrawMinimizeTrading');
 const WETH = artifacts.require('WETH');
 const MockERC20 = artifacts.require('MockERC20');
 
 const FOREVER = '2000000000';
 const { expectRevert, BN } = require('@openzeppelin/test-helpers');
 
-contract('StrategyLiquidate2', ([deployer, alice, bob]) => {
+contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
   beforeEach(async () => {
     this.factory = await MockUniswapV2Factory.new(deployer);
     this.weth = await WETH.new();
@@ -18,7 +18,7 @@ contract('StrategyLiquidate2', ([deployer, alice, bob]) => {
     await this.token.mint(bob, '1000000000000000000');
     await this.factory.createPair(this.weth.address, this.token.address);
     this.lp = await MockUniswapV2Pair.at(await this.factory.getPair(this.token.address, this.weth.address));
-    this.strat = await StrategyLiquidate2.new(this.router.address);
+    this.strat = await StrategyWithdrawMinimizeTrading.new(this.router.address);
   });
 
   context('It should convert LP tokens and farming token', () => {
