@@ -40,18 +40,18 @@ contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
       await this.lp.transfer(this.strat.address, '316227766016837933', { from: bob });
     });
 
-    it('should revert, Bob uses liquidate strategy to turn all LPs back to ETH with an unreasonable expectation', async () => {
-      // Bob uses liquidate strategy to turn all LPs back to ETH but with an unreasonable expectation
+    it('should revert, Bob uses withdraw minimize trading strategy to turn LPs back to farming with an unreasonable expectation', async () => {
+      // Bob uses withdraw minimize trading strategy to turn LPs back to farming with an unreasonable expectation
       await expectRevert(
         this.strat.execute(
           bob,
-          '0',
+          '1000000000000000000',
           web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('2', 'ether')]),
           {
             from: bob,
           }
         ),
-        'insufficient ETH received'
+        'insufficient farming token received'
       );
     });
 
@@ -62,7 +62,7 @@ contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
       await this.strat.execute(
         bob,
         '1000000000000000000', // debt 1 ETH
-        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
+        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0.001', 'ether')]),
         {
           from: bob,
           gasPrice: 0,
@@ -83,7 +83,7 @@ contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
       await this.strat.execute(
         bob,
         '500000000000000000', // debt 0.5 ETH
-        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
+        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0.001', 'ether')]),
         {
           from: bob,
           gasPrice: 0,
@@ -104,7 +104,7 @@ contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
       await this.strat.execute(
         bob,
         '1200000000000000000', // debt 1.2 ETH
-        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
+        web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0.001', 'ether')]),
         {
           from: bob,
           gasPrice: 0,
@@ -123,7 +123,7 @@ contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
         this.strat.execute(
           bob,
           '2000000000000000000', // debt 2 ETH
-          web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('1', 'ether')]),
+          web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0.001', 'ether')]),
           {
             from: bob,
             gasPrice: 0,

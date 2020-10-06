@@ -34,7 +34,7 @@ contract StrategyWithdrawMinimizeTrading is Ownable, ReentrancyGuard, Strategy {
     bytes calldata data
   ) external payable nonReentrant {
     // 1. Find out what farming token we are dealing with.
-    (address fToken, uint256 minETH) = abi.decode(data, (address, uint256));
+    (address fToken, uint256 minFToken) = abi.decode(data, (address, uint256));
     IUniswapV2Pair lpToken = IUniswapV2Pair(factory.getPair(fToken, weth));
     // 2. Remove all liquidity back to ETH and farming tokens.
     lpToken.approve(address(router), uint256(-1));
@@ -53,10 +53,10 @@ contract StrategyWithdrawMinimizeTrading is Ownable, ReentrancyGuard, Strategy {
     }
     // 4. Return ETH back to the original caller.
     uint256 remainingBalance = address(this).balance;
-    require(remainingBalance >= minETH, 'insufficient ETH received');
     SafeToken.safeTransferETH(msg.sender, remainingBalance);
     // 5. Return remaining farming tokens to user
     uint256 remainingFToken = fToken.myBalance();
+    require(remainingFToken >= minFToken, 'insufficient farming token received');
     if (remainingFToken > 0) {
       fToken.safeTransfer(user, remainingFToken);
     }
