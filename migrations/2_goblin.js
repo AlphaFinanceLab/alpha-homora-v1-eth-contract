@@ -68,7 +68,7 @@ module.exports = function (deployer, network, [creator]) {
     await deployer.deploy(
       SimpleBankConfig,
       web3.utils.toWei('1', 'ether'), // min debt size 1 ETH
-      '5787037040', // 18.25% per year
+      '3170979198', // 10% per year
       '1000', // 10% reserve pool
       '500' // 5% kill prize
     );
