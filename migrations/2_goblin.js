@@ -64,10 +64,7 @@ module.exports = function (deployer, network, [creator]) {
     const goblin = await UniswapGoblin.deployed();
 
     // setup goblin to config
-    await config.setIsGoblin(goblin.address, true);
-    await config.setAcceptDebt(goblin.address, true);
-    await config.setWorkFactor(goblin.address, '7000');
-    await config.setKillFactor(goblin.address, '8000');
+    await config.setGoblin(goblin.address, true, true, '7000', '8000');
 
     // mint mock token to deployer
     await token.mint(creator, web3.utils.toWei('100', 'ether'));

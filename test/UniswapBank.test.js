@@ -59,10 +59,7 @@ contract('UniswapBank', ([deployer, alice, bob, eve]) => {
       this.liqStrat.address,
       '100'
     );
-    await this.config.setIsGoblin(this.goblin.address, true);
-    await this.config.setAcceptDebt(this.goblin.address, true);
-    await this.config.setWorkFactor(this.goblin.address, '7000');
-    await this.config.setKillFactor(this.goblin.address, '8000');
+    await this.config.setGoblin(this.goblin.address, true, true, '7000', '8000');
     // Deployer adds 1e17 MOCK + 1e18 WEI
     await this.token.approve(this.router.address, web3.utils.toWei('0.1', 'ether'));
     await this.router.addLiquidityETH(
@@ -335,7 +332,12 @@ contract('UniswapBank', ([deployer, alice, bob, eve]) => {
 
   it('should reinvest correctly', async () => {
     // Set Bank's debt interests to 0% per year
-    await this.config.setInterestRate('0');
+    await this.config.setParams(
+      web3.utils.toWei('1', 'ether'), // 1 ETH min debt size,
+      '0', // 0% per year
+      '1000', // 10% reserve pool
+      '1000' // 10% Kill prize
+    );
 
     // Set Reinvest bounty to 10% of the reward
     await this.goblin.setReinvestBountyBps('1000');
