@@ -95,7 +95,7 @@ contract Bank is ERC20, ReentrancyGuard, Ownable {
         return (Goblin(pos.goblin).health(id), debtShareToVal(pos.debtShare));
     }
 
-    /// @dev Return the total ETH entitied to the token holders. Be careful of unaccrued interests.
+    /// @dev Return the total ETH entitled to the token holders. Be careful of unaccrued interests.
     function totalETH() public view returns (uint256) {
         return address(this).balance.add(glbDebtVal).sub(reservePool);
     }
