@@ -6,9 +6,9 @@ The repository contains the smart contracts of [AlphaHomora](https://homora.alph
 
 ## Smart Contract Structure
 
-### Gringotts 🏦 ([code](./contracts/Gringotts.sol))
+### Bank 🏦 ([code](./contracts/Bank.sol))
 
-[Gringotts Wizard Bank](https://harrypotter.fandom.com/wiki/Gringotts_Wizarding_Bank) is the smart contract that manages all leveraged yeild farming positions. All interactions to AlphaHomora happen through this smart contract. If you are a rich wizard 🧙‍♂️, you can deposit your ETH/BNB to earn intersts. If you are a poor farmer 👩‍🌾, you can open a new position on Gringotts by specifying the debt you will take anda Goblin who will work for your position.
+Bank is the smart contract that manages all leveraged yeild farming positions. All interactions to AlphaHomora happen through this smart contract. If you are a rich wizard 🧙‍♂️, you can deposit your ETH/BNB to earn intersts. If you are a poor farmer 👩‍🌾, you can open a new position on Bank by specifying the debt you will take anda Goblin who will work for your position.
 
 ### Goblins 👺 ([code](./contracts/Goblin.sol))
 

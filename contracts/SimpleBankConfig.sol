@@ -1,12 +1,12 @@
 pragma solidity 0.5.16;
 import "openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol";
-import "./GringottsConfig.sol";
+import "./BankConfig.sol";
 
-contract SimpleGringottsConfig is GringottsConfig, Ownable {
+contract SimpleBankConfig is BankConfig, Ownable {
     uint256 public minDebtSize;
     uint256 public interestRate;
     uint256 public getReservePoolBps;
-    uint256 public getKedavraBps;
+    uint256 public getKillBps;
     mapping (address => bool) public isGoblin;
     mapping (address => bool) public acceptDebt;
     mapping (address => uint256) public _workFactor;
@@ -16,12 +16,12 @@ contract SimpleGringottsConfig is GringottsConfig, Ownable {
         uint256 _minDebtSize,
         uint256 _interestRate,
         uint256 _reservePoolBps,
-        uint256 _kedavraBps
+        uint256 _killBps
     ) public {
         minDebtSize = _minDebtSize;
         interestRate = _interestRate;
         getReservePoolBps = _reservePoolBps;
-        getKedavraBps = _kedavraBps;
+        getKillBps = _killBps;
     }
 
     function getInterestRate(uint256 /* debt */, uint256 /* floating */) external view returns (uint256) {
@@ -39,7 +39,7 @@ contract SimpleGringottsConfig is GringottsConfig, Ownable {
     function setMinDebtSize(uint256 val) external onlyOwner { minDebtSize = val; }
     function setInterestRate(uint256 val) external onlyOwner { interestRate = val; }
     function setReservePoolBps(uint256 val) external onlyOwner { getReservePoolBps = val; }
-    function setKedavraBps(uint256 val) external onlyOwner { getKedavraBps = val; }
+    function setKillBps(uint256 val) external onlyOwner { getKillBps = val; }
     function setIsGoblin(address addr, bool val) external onlyOwner{ isGoblin[addr] = val; }
     function setAcceptDebt(address addr, bool val) external onlyOwner{ acceptDebt[addr] = val; }
     function setWorkFactor(address addr, uint256 val) external onlyOwner{ _workFactor[addr] = val; }
