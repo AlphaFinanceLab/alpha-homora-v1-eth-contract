@@ -18,7 +18,7 @@ contract StrategyAllETHOnly is Ownable, ReentrancyGuard, Strategy {
     IUniswapV2Router02 public router;
     address public weth;
 
-    /// @dev Create a new liquidate strategy instance.
+    /// @dev Create a new add ETH only strategy instance.
     /// @param _router The Uniswap router smart contract.
     constructor(IUniswapV2Router02 _router) public {
         factory = IUniswapV2Factory(_router.factory());
