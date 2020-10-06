@@ -103,7 +103,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         staking.getReward();
         uint256 reward = uni.myBalance();
         if (reward == 0) return;
-        // 2. Send 0.5% reward bounty to the caller.
+        // 2. Send the reward bounty to the caller.
         uint256 bounty = reward.mul(reinvestBountyBps) / 10000;
         uni.safeTransfer(msg.sender, bounty);
         // 3. Convert all the remaining rewards to ETH.

@@ -51,7 +51,7 @@ contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
             from: bob,
           }
         ),
-        'insufficient farming token received'
+        'insufficient farming tokens received'
       );
     });
 
@@ -123,7 +123,10 @@ contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
         this.strat.execute(
           bob,
           '2000000000000000000', // debt 2 ETH
-          web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0.001', 'ether')]),
+          web3.eth.abi.encodeParameters(
+            ['address', 'uint256'],
+            [this.token.address, web3.utils.toWei('0.001', 'ether')]
+          ),
           {
             from: bob,
             gasPrice: 0,
