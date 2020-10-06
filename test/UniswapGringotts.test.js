@@ -2,8 +2,8 @@ const MockUniswapV2Factory = artifacts.require('MockUniswapV2Factory');
 const MockUniswapV2Pair = artifacts.require('MockUniswapV2Pair');
 const MockStakingRewards = artifacts.require('MockStakingRewards');
 const UniswapGoblin = artifacts.require('UniswapGoblin');
-const Gringotts = artifacts.require('Gringotts');
-const SimpleGringottsConfig = artifacts.require('SimpleGringottsConfig');
+const Bank = artifacts.require('Bank');
+const SimpleBankConfig = artifacts.require('SimpleBankConfig');
 const UniswapV2Router02 = artifacts.require('UniswapV2Router02');
 const StrategyAllETHOnly = artifacts.require('StrategyAllETHOnly');
 const StrategyLiquidate = artifacts.require('StrategyLiquidate');
@@ -26,7 +26,7 @@ function assertAlmostEqual(expected, actual) {
   );
 }
 
-contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
+contract('UniswapBank', ([deployer, alice, bob, eve]) => {
   beforeEach(async () => {
     this.factory = await MockUniswapV2Factory.new(deployer);
     this.weth = await WETH.new();
@@ -41,13 +41,13 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     this.lp = await MockUniswapV2Pair.at(await this.factory.getPair(this.token.address, this.weth.address));
     this.addStrat = await StrategyAllETHOnly.new(this.router.address);
     this.liqStrat = await StrategyLiquidate.new(this.router.address);
-    this.config = await SimpleGringottsConfig.new(
+    this.config = await SimpleBankConfig.new(
       web3.utils.toWei('1', 'ether'), // 1 ETH min debt size
       '3472222222222', // 30% per year
       '1000', // 10% reserve pool
-      '1000' // 10% Kedavra prize
+      '1000' // 10% Kill prize
     );
-    this.bank = await Gringotts.new(this.config.address);
+    this.bank = await Bank.new(this.config.address);
     this.staking = await MockStakingRewards.new(deployer, deployer, this.uni.address, this.lp.address);
     this.goblin = await UniswapGoblin.new(
       this.bank.address,
@@ -106,7 +106,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
   it('should work', async () => {
     // Alice cannot take 1 ETH loan because the contract does not have it
     await expectRevert(
-      this.bank.alohomora(
+      this.bank.work(
         0,
         this.goblin.address,
         web3.utils.toWei('1', 'ether'),
@@ -120,11 +120,11 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       'insufficient ETH in the bank'
     );
     // Deployer deposits 3 ETH to the bank
-    await this.bank.engorgio({ value: web3.utils.toWei('3', 'ether') });
+    await this.bank.deposit({ value: web3.utils.toWei('3', 'ether') });
     // Now Alice can take 1 ETH loan + 1 ETH of her to create a new position
     console.log(
       (
-        await this.bank.alohomora(
+        await this.bank.work(
           0,
           this.goblin.address,
           web3.utils.toWei('1', 'ether'),
@@ -144,7 +144,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     await this.goblin.reinvest({ from: eve });
     assertAlmostEqual('1428571428571295', await this.uni.balanceOf(eve));
     // Her position should now have more than 2 ETH health and ~1.3 ETH debt
-    await this.bank.engorgio(); // Random action to trigger interest computation
+    await this.bank.deposit(); // Random action to trigger interest computation
     const healthDebt = await this.bank.positionInfo('1');
     assertAlmostEqual('2582123996372678436', healthDebt[0]);
     assertAlmostEqual('1299999999999980800', healthDebt[1]);
@@ -153,15 +153,15 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     assertAlmostEqual('30000000000000000', await this.bank.reservePool());
     assertAlmostEqual('3269999999999982720', await this.bank.totalETH());
     // You can't liquidate her position yet
-    await expectRevert(this.bank.kedavra('1'), "can't liquidate", { from: eve });
+    await expectRevert(this.bank.kill('1'), "can't liquidate", { from: eve });
     await time.increase(time.duration.days(1));
-    await expectRevert(this.bank.kedavra('1'), "can't liquidate", { from: eve });
+    await expectRevert(this.bank.kill('1'), "can't liquidate", { from: eve });
     await time.increase(time.duration.days(1));
-    await this.bank.engorgio(); // Random action to trigger interest computation
+    await this.bank.deposit(); // Random action to trigger interest computation
     assertAlmostEqual('3972004999999927424', await this.bank.totalETH());
     assertAlmostEqual('99988133540000000000', await web3.eth.getBalance(eve));
     // Now you can liquidate because of the insane interest rate
-    await this.bank.kedavra('1', { from: eve });
+    await this.bank.kill('1', { from: eve });
     assertAlmostEqual('100237911439637267843', await web3.eth.getBalance(eve));
     assertAlmostEqual('4079999999999919360', await web3.eth.getBalance(this.bank.address));
     assert.equal('0', await this.bank.glbDebtVal());
@@ -170,7 +170,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     // Alice creates a new position again
     console.log(
       (
-        await this.bank.alohomora(
+        await this.bank.work(
           0,
           this.goblin.address,
           web3.utils.toWei('1', 'ether'),
@@ -184,7 +184,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       ).receipt.gasUsed
     );
     // She can close position
-    await this.bank.alohomora(
+    await this.bank.work(
       2,
       this.goblin.address,
       '0',
@@ -197,13 +197,13 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     );
   });
 
-  it('Should deposit and withdraw eth from Gringotts (bad debt case)', async () => {
+  it('Should deposit and withdraw eth from Bank (bad debt case)', async () => {
     // Deployer deposits 10 ETH to the bank
-    await this.bank.engorgio({ value: web3.utils.toWei('10', 'ether') });
+    await this.bank.deposit({ value: web3.utils.toWei('10', 'ether') });
     assertAlmostEqual('10000000000000000000', await this.bank.balanceOf(deployer));
 
     // Bob borrows 2 ETH loan
-    await this.bank.alohomora(
+    await this.bank.work(
       0,
       this.goblin.address,
       web3.utils.toWei('2', 'ether'),
@@ -219,7 +219,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     assertAlmostEqual('10000000000000000000', await this.bank.totalETH());
 
     // Alice deposits 2 ETH
-    await this.bank.engorgio({ value: web3.utils.toWei('2', 'ether'), from: alice });
+    await this.bank.deposit({ value: web3.utils.toWei('2', 'ether'), from: alice });
 
     // check Alice gETH balance = 2/10 * 10 = 2 gETH
     assertAlmostEqual('2000000000000000000', await this.bank.balanceOf(alice));
@@ -240,19 +240,19 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     // Alice liquidates Bob position#1
     let aliceBefore = new BN(await web3.eth.getBalance(alice));
 
-    await this.bank.kedavra(1, { from: alice, gasPrice: 0 });
+    await this.bank.kill(1, { from: alice, gasPrice: 0 });
     let aliceAfter = new BN(await web3.eth.getBalance(alice));
 
     // Bank balance is increase by liquidation
     assertAlmostEqual('10002702699312215556', await web3.eth.getBalance(this.bank.address));
 
-    // Alice is liquidator, Alice should receive 10% Kedavra prize
+    // Alice is liquidator, Alice should receive 10% Kill prize
     // ETH back from liquidation 3002999235795062, 10% of 3002999235795062 is 300299923579506
     assertAlmostEqual('300299923579506', aliceAfter.sub(aliceBefore));
 
     // Alice withdraws 2 gETH
     aliceBefore = new BN(await web3.eth.getBalance(alice));
-    await this.bank.reducio('2000000000000000000', { from: alice, gasPrice: 0 });
+    await this.bank.withdraw('2000000000000000000', { from: alice, gasPrice: 0 });
     aliceAfter = new BN(await web3.eth.getBalance(alice));
 
     // alice gots 2/12 * 10.002702699312215556 = 1.667117116552036
@@ -261,10 +261,10 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
 
   it('should liquidate user position correctly', async () => {
     // Bob deposits 20 ETH
-    await this.bank.engorgio({ value: web3.utils.toWei('20', 'ether'), from: bob });
+    await this.bank.deposit({ value: web3.utils.toWei('20', 'ether'), from: bob });
 
     // Position#1: Alice borrows 10 ETH loan
-    await this.bank.alohomora(
+    await this.bank.work(
       0,
       this.goblin.address,
       web3.utils.toWei('10', 'ether'),
@@ -288,7 +288,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       deployer,
       FOREVER
     );
-    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+    await expectRevert(this.bank.kill('1'), "can't liquidate");
 
     // Price swing 20%
     // Add more token to the pool equals to
@@ -302,7 +302,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       deployer,
       FOREVER
     );
-    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+    await expectRevert(this.bank.kill('1'), "can't liquidate");
 
     // Price swing 23.43%
     // Existing token on the pool = 0.10540925533894599 + 0.012441874858811944 = 0.11785113019775793
@@ -315,7 +315,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       deployer,
       FOREVER
     );
-    await expectRevert(this.bank.kedavra('1'), "can't liquidate");
+    await expectRevert(this.bank.kill('1'), "can't liquidate");
 
     // Price swing 30%
     // Existing token on the pool = 0.11785113019775793 + 0.016829279312591913 = 0.13468040951034985
@@ -330,24 +330,24 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     );
 
     // Bob can kill alice's position
-    await this.bank.kedavra('1', { from: bob });
+    await this.bank.kill('1', { from: bob });
   });
 
   it('should reinvest correctly', async () => {
-    // Set Gringotts's debt interests to 0% per year
+    // Set Bank's debt interests to 0% per year
     await this.config.setInterestRate('0');
 
     // Set Reinvest bounty to 10% of the reward
     await this.goblin.setReinvestBountyBps('1000');
 
     // Bob deposits 10 ETH
-    await this.bank.engorgio({ value: web3.utils.toWei('10', 'ether'), from: bob, gasPrice: 0 });
+    await this.bank.deposit({ value: web3.utils.toWei('10', 'ether'), from: bob, gasPrice: 0 });
 
     // Alice deposits 12 ETH
-    await this.bank.engorgio({ value: web3.utils.toWei('12', 'ether'), from: alice, gasPrice: 0 });
+    await this.bank.deposit({ value: web3.utils.toWei('12', 'ether'), from: alice, gasPrice: 0 });
 
     // Position#1: Bob borrows 10 ETH loan
-    await this.bank.alohomora(
+    await this.bank.work(
       0,
       this.goblin.address,
       web3.utils.toWei('10', 'ether'),
@@ -360,7 +360,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     );
 
     // Position#2: Alice borrows 2 ETH loan
-    await this.bank.alohomora(
+    await this.bank.work(
       0,
       this.goblin.address,
       web3.utils.toWei('2', 'ether'),
@@ -451,7 +451,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
 
     const bobBefore = new BN(await web3.eth.getBalance(bob));
     // Bob close position#1
-    await this.bank.alohomora(
+    await this.bank.work(
       1,
       this.goblin.address,
       '0',
@@ -468,7 +468,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
     assertAlmostEqual('13037163593789687703', bobAfter.sub(bobBefore));
 
     // Alice add ETH again
-    await this.bank.alohomora(
+    await this.bank.work(
       2,
       this.goblin.address,
       0,
@@ -482,7 +482,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
 
     const aliceBefore = new BN(await web3.eth.getBalance(alice));
     // Alice close position#2
-    await this.bank.alohomora(
+    await this.bank.work(
       2,
       this.goblin.address,
       '0',
@@ -494,7 +494,7 @@ contract('UniswapGringotts', ([deployer, alice, bob, eve]) => {
       { from: alice, gasPrice: 0 }
     );
     const aliceAfter = new BN(await web3.eth.getBalance(alice));
-    
+
     // Check Alice account
     assertAlmostEqual('8747417676666762843', aliceAfter.sub(aliceBefore));
   });

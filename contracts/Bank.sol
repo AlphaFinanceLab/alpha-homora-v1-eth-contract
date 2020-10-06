@@ -4,11 +4,11 @@ import "openzeppelin-solidity-2.3.0/contracts/token/ERC20/ERC20.sol";
 import "openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol";
 import "openzeppelin-solidity-2.3.0/contracts/math/Math.sol";
 import "openzeppelin-solidity-2.3.0/contracts/utils/ReentrancyGuard.sol";
-import "./GringottsConfig.sol";
+import "./BankConfig.sol";
 import "./Goblin.sol";
 import "./SafeToken.sol";
 
-contract Gringotts is ERC20, ReentrancyGuard, Ownable {
+contract Bank is ERC20, ReentrancyGuard, Ownable {
     /// @notice Libraries
     using SafeToken for address;
     using SafeMath for uint256;
@@ -16,11 +16,11 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @notice Events
     event AddDebt(uint256 indexed id, uint256 debtShare);
     event RemoveDebt(uint256 indexed id, uint256 debtShare);
-    event Alohomora(uint256 indexed id, uint256 loan);
-    event Kedavra(uint256 indexed id, address indexed killer, uint256 prize, uint256 left);
+    event Work(uint256 indexed id, uint256 loan);
+    event Kill(uint256 indexed id, address indexed killer, uint256 prize, uint256 left);
 
-    string public name = "GrinGotts ETH";
-    string public symbol = "gETH";
+    string public name = "Interest Bearing ETH";
+    string public symbol = "ibETH";
     uint8 public decimals = 18;
 
     struct Position {
@@ -29,7 +29,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         uint256 debtShare;
     }
 
-    GringottsConfig public config;
+    BankConfig public config;
     mapping (uint256 => Position) public positions;
     uint256 public nextPositionID = 1;
 
@@ -56,7 +56,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         _;
     }
 
-    constructor(GringottsConfig _config) public {
+    constructor(BankConfig _config) public {
         config = _config;
         lastAccrueTime = now;
     }
@@ -100,15 +100,15 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         return address(this).balance.add(glbDebtVal).sub(reservePool);
     }
 
-    /// @dev Add more ETH to Gringotts. Hope to get some good returns.
-    function engorgio() external payable accrue(msg.value) nonReentrant {
+    /// @dev Add more ETH to the bank. Hope to get some good returns.
+    function deposit() external payable accrue(msg.value) nonReentrant {
         uint256 total = totalETH().sub(msg.value);
         uint256 share = total == 0 ? msg.value : msg.value.mul(totalSupply()).div(total);
         _mint(msg.sender, share);
     }
 
-    /// @dev Withdraw ETH from Gringotts by burning the share tokens.
-    function reducio(uint256 share) external accrue(0) nonReentrant {
+    /// @dev Withdraw ETH from the bank by burning the share tokens.
+    function withdraw(uint256 share) external accrue(0) nonReentrant {
         uint256 amount = share.mul(totalETH()).div(totalSupply());
         _burn(msg.sender, share);
         SafeToken.safeTransferETH(msg.sender, amount);
@@ -120,7 +120,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     /// @param loan The amount of ETH to borrow from the pool.
     /// @param maxReturn The max amount of ETH to return to the pool.
     /// @param data The calldata to pass along to the goblin for more working context.
-    function alohomora(uint256 id, address goblin, uint256 loan, uint256 maxReturn, bytes calldata data)
+    function work(uint256 id, address goblin, uint256 loan, uint256 maxReturn, bytes calldata data)
         external payable
         onlyEOA accrue(msg.value) nonReentrant
     {
@@ -134,7 +134,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
             require(positions[id].goblin == goblin, "bad position goblin");
             require(positions[id].owner == msg.sender, "not position owner");
         }
-        emit Alohomora(id, loan);
+        emit Work(id, loan);
         // 2. Make sure the goblin can accept more debt and remove the existing debt.
         require(config.isGoblin(goblin), "not a goblin");
         require(loan == 0 || config.acceptDebt(goblin), "goblin not accept more debt");
@@ -164,9 +164,9 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         if (back > lessDebt) SafeToken.safeTransferETH(msg.sender, back - lessDebt);
     }
 
-    /// @dev *Avada Kedavra* Cast the killing curse to the position. Liquidate it immediately.
+    /// @dev Kill the given to the position. Liquidate it immediately if killFactor condition is met.
     /// @param id The position ID to be killed.
-    function kedavra(uint256 id) external onlyEOA accrue(0) nonReentrant {
+    function kill(uint256 id) external onlyEOA accrue(0) nonReentrant {
         // 1. Verify that the position is eligible for liquidation.
         Position storage pos = positions[id];
         require(pos.debtShare > 0, "no debt");
@@ -178,13 +178,13 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
         uint256 beforeETH = address(this).balance;
         Goblin(pos.goblin).liquidate(id);
         uint256 back = address(this).balance.sub(beforeETH);
-        uint256 prize = back.mul(config.getKedavraBps()).div(10000);
+        uint256 prize = back.mul(config.getKillBps()).div(10000);
         uint256 rest = back.sub(prize);
         // 3. Clear position debt and return funds to liquidator and position owner.
         if (prize > 0) SafeToken.safeTransferETH(msg.sender, prize);
         uint256 left = rest > debt ? rest - debt : 0;
         if (left > 0) SafeToken.safeTransferETH(pos.owner, left);
-        emit Kedavra(id, msg.sender, prize, left);
+        emit Kill(id, msg.sender, prize, left);
     }
 
     /// @dev Internal function to add the given debt value to the given position.
@@ -215,7 +215,7 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
 
     /// @dev Update bank configuration to a new address. Must only be called by owner.
     /// @param _config The new configurator address.
-    function updateConfig(GringottsConfig _config) external onlyOwner {
+    function updateConfig(BankConfig _config) external onlyOwner {
         config = _config;
     }
 
@@ -225,6 +225,12 @@ contract Gringotts is ERC20, ReentrancyGuard, Ownable {
     function withdrawReserve(address to, uint256 value) external onlyOwner nonReentrant {
         reservePool = reservePool.sub(value);
         SafeToken.safeTransferETH(to, value);
+    }
+
+    /// @dev Reduce ETH reserve, effectively giving them to the depositors.
+    /// @param value The number of ETH reserve to reduce.
+    function reduceReserve(uint256 value) external onlyOwner {
+        reservePool = reservePool.sub(value);
     }
 
     /// @dev Recover ERC20 tokens that were accidentally sent to this smart contract.

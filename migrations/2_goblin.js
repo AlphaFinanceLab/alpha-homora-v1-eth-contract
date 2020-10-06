@@ -1,7 +1,7 @@
-const Gringotts = artifacts.require('Gringotts');
-const SimpleGringottsConfig = artifacts.require('SimpleGringottsConfig');
-const WETH = artifacts.require('WETH')
-const UniswapV2Factory = artifacts.require('UniswapV2Factory')
+const Bank = artifacts.require('Bank');
+const SimpleBankConfig = artifacts.require('SimpleBankConfig');
+const WETH = artifacts.require('WETH');
+const UniswapV2Factory = artifacts.require('UniswapV2Factory');
 const UniswapV2Router02 = artifacts.require('UniswapV2Router02');
 const UniswapV2Pair = artifacts.require('UniswapV2Pair');
 const MockERC20 = artifacts.require('MockERC20');
@@ -11,10 +11,10 @@ const StakingRewards = artifacts.require('StakingRewards');
 const UniswapGoblin = artifacts.require('UniswapGoblin');
 
 module.exports = function (deployer, network, [creator]) {
-  if (network !== "kovan") return;
+  if (network !== 'kovan') return;
 
-  deployer.then(async() => {
-    const router = await UniswapV2Router02.at("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D");
+  deployer.then(async () => {
+    const router = await UniswapV2Router02.at('0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D');
     const factory = await UniswapV2Factory.at(await router.factory());
     const weth = await WETH.at(await router.WETH());
 
@@ -33,27 +33,24 @@ module.exports = function (deployer, network, [creator]) {
 
     await deployer.deploy(StrategyLiquidate, router.address);
     const liqStrat = await StrategyLiquidate.deployed();
-    
-    await deployer.deploy(SimpleGringottsConfig, 
+
+    await deployer.deploy(
+      SimpleBankConfig,
       web3.utils.toWei('1', 'ether'),
       '3472222222222', // 30% per year
       '1000', // 10% reserve pool
-      '1000' // 10% Kedavra prize
+      '1000' // 10% Kill prize
     );
-    const config = await SimpleGringottsConfig.deployed();
+    const config = await SimpleBankConfig.deployed();
 
-    await deployer.deploy(Gringotts, config.address);
-    const bank = await Gringotts.deployed();
-    
-    await deployer.deploy(StakingRewards,
-      creator,
-      creator,
-      uni.address,
-      lp.address
-    );
+    await deployer.deploy(Bank, config.address);
+    const bank = await Bank.deployed();
+
+    await deployer.deploy(StakingRewards, creator, creator, uni.address, lp.address);
     const staking = await StakingRewards.deployed();
 
-    await deployer.deploy(UniswapGoblin,
+    await deployer.deploy(
+      UniswapGoblin,
       bank.address,
       staking.address,
       router.address,
