@@ -48,8 +48,8 @@ contract StrategyWithdrawMinimizeTrading is Ownable, ReentrancyGuard, Strategy {
     uint256 balance = address(this).balance;
     if (debt > balance) {
       // Convert some farming tokens to ETH
-      uint256 remaingDebt = debt.sub(balance);
-      router.swapTokensForExactETH(remaingDebt, fToken.myBalance(), path, address(this), now);
+      uint256 remainingDebt = debt.sub(balance);
+      router.swapTokensForExactETH(remainingDebt, fToken.myBalance(), path, address(this), now);
     }
     // 4. Return ETH back to the original caller.
     uint256 remainingBalance = address(this).balance;
