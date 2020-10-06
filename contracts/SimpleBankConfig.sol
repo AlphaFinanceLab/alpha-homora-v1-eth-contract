@@ -33,9 +33,9 @@ contract SimpleBankConfig is BankConfig, Ownable {
 
     /// @dev Set all the basic parameters. Must only be called by the owner.
     /// @param _minDebtSize The new minimum debt size value.
-    /// @param _interestRate The new minimum debt size value.
-    /// @param _reservePoolBps The new minimum debt size value.
-    /// @param _minDebtSize The new minimum debt size value.
+    /// @param _interestRate The new interest rate per second value.
+    /// @param _reservePoolBps The new interests allocated to the reserve pool value.
+    /// @param _killBps The new reward for killing a position value.
     function setParams(
         uint256 _minDebtSize,
         uint256 _interestRate,
