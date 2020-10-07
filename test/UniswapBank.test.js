@@ -100,6 +100,53 @@ contract('UniswapBank', ([deployer, alice, bob, eve]) => {
     assertAlmostEqual('95238095238086400', await this.staking.earned(bob)); // 2/21 of total reward
   });
 
+  it('should allow positions without debt', async () => {
+    // Deployer deposits 3 ETH to the bank
+    await this.bank.deposit({ value: web3.utils.toWei('3', 'ether') });
+    // Alice cannot take 1 ETH loan but only put in 0.3 ETH
+    await expectRevert(
+      this.bank.work(
+        0,
+        this.goblin.address,
+        web3.utils.toWei('1', 'ether'),
+        '0',
+        web3.eth.abi.encodeParameters(
+          ['address', 'bytes'],
+          [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+        ),
+        { value: web3.utils.toWei('0.3', 'ether'), from: alice }
+      ),
+      'bad work factor'
+    );
+    // Alice cannot take 0.3 debt because it is too small
+    await expectRevert(
+      this.bank.work(
+        0,
+        this.goblin.address,
+        web3.utils.toWei('0.3', 'ether'),
+        '0',
+        web3.eth.abi.encodeParameters(
+          ['address', 'bytes'],
+          [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+        ),
+        { value: web3.utils.toWei('0.3', 'ether'), from: alice }
+      ),
+      'too small debt size'
+    );
+    // Alice can take 0 debt ok
+    await this.bank.work(
+      0,
+      this.goblin.address,
+      web3.utils.toWei('0', 'ether'),
+      '0',
+      web3.eth.abi.encodeParameters(
+        ['address', 'bytes'],
+        [this.addStrat.address, web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0'])]
+      ),
+      { value: web3.utils.toWei('0.3', 'ether'), from: alice }
+    );
+  });
+
   it('should work', async () => {
     // Alice cannot take 1 ETH loan because the contract does not have it
     await expectRevert(

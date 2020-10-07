@@ -157,8 +157,6 @@ contract Bank is ERC20, ReentrancyGuard, Ownable {
             uint256 workFactor = config.workFactor(goblin, debt);
             require(health.mul(workFactor) >= debt.mul(10000), "bad work factor");
             _addDebt(id, debt);
-        } else {
-            require(Goblin(goblin).health(id) == 0, "zero debt but nonzero health");
         }
         // 5. Return excess ETH back.
         if (back > lessDebt) SafeToken.safeTransferETH(msg.sender, back - lessDebt);
