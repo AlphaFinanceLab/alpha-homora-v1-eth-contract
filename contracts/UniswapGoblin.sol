@@ -222,11 +222,14 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         reinvestBountyBps = _reinvestBountyBps;
     }
 
-    /// @dev Set the given strategy's approval status.
-    /// @param strat The strategy address.
-    /// @param isOk Whether to approve or unapprove the given strategy.
-    function setStrategyOk(address strat, bool isOk) external onlyOwner {
-        okStrats[strat] = isOk;
+    /// @dev Set the given strategies' approval status.
+    /// @param strats The strategy addresses.
+    /// @param isOk Whether to approve or unapprove the given strategies.
+    function setStrategyOk(address[] calldata strats, bool isOk) external onlyOwner {
+        uint256 len = strats.length;
+        for (uint256 idx = 0; idx < len; idx++) {
+            okStrats[strats[idx]] = isOk;
+        }
     }
 
     /// @dev Update critical strategy smart contracts. EMERGENCY ONLY. Bad strategies can steal funds.
