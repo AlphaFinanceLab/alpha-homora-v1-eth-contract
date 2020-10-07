@@ -17,7 +17,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     using SafeMath for uint256;
 
     /// @notice Events
-    event Reinvest(address indexed caller, uint256 reward);
+    event Reinvest(address indexed caller, uint256 reward, uint256 bounty);
     event AddShare(uint256 indexed id, uint256 share);
     event RemoveShare(uint256 indexed id, uint256 share);
     event Liquidate(uint256 indexed id, uint256 wad);
@@ -115,7 +115,7 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         addStrat.execute.value(address(this).balance)(address(0), 0, abi.encode(fToken, 0));
         // 5. Mint more LP tokens and stake them for more rewards.
         staking.stake(lpToken.balanceOf(address(this)));
-        emit Reinvest(msg.sender, reward);
+        emit Reinvest(msg.sender, reward, bounty);
     }
 
     /// @dev Work on the given position. Must be called by the operator.
