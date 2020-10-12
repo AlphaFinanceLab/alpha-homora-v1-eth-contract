@@ -160,8 +160,8 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
         uint256 lpBalance = shareToBalance(shares[id]);
         uint256 lpSupply = lpToken.totalSupply(); // Ignore pending mintFee as it is insignificant
         // 2. Get the pool's total supply of WETH and farming token.
-        uint256 totalWETH = weth.balanceOf(address(lpToken));
-        uint256 totalfToken = fToken.balanceOf(address(lpToken));
+        (uint256 r0, uint256 r1,) = lpToken.getReserves();
+        (uint256 totalWETH, uint256 totalfToken) = lpToken.token0() == weth ? (r0, r1) : (r1, r0);
         // 3. Convert the position's LP tokens to the underlying assets.
         uint256 userWETH = lpBalance.mul(totalWETH).div(lpSupply);
         uint256 userfToken = lpBalance.mul(totalfToken).div(lpSupply);
