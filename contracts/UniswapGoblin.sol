@@ -33,8 +33,8 @@ contract UniswapGoblin is Ownable, ReentrancyGuard, Goblin {
     address public operator;
 
     /// @notice Mutable state variables
-    mapping(uint256 => uint256) shares;
-    mapping(address => bool) okStrats;
+    mapping(uint256 => uint256) public shares;
+    mapping(address => bool) public okStrats;
     uint256 public totalShare;
     Strategy public addStrat;
     Strategy public liqStrat;

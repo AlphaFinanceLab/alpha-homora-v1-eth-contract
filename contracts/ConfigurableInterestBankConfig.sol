@@ -49,7 +49,7 @@ contract ConfigurableInterestBankConfig is BankConfig, Ownable {
     /// The reward for successfully killing a position.
     uint256 public getKillBps;
     /// Mapping for goblin address to its configuration.
-    mapping (address => GoblinConfig) goblins;
+    mapping (address => GoblinConfig) public goblins;
     /// Interest rate model
     InterestModel public interestModel;
 
