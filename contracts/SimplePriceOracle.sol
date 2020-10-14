@@ -13,8 +13,8 @@ contract SimplePriceOracle is Ownable, PriceOracle {
     /// @notice Public price data mapping storage.
     mapping (address => mapping (address => PriceData)) public store;
 
-    /// @dev Set the price of the token token pairs. Must be called by the owner.
-    function setPrice(
+    /// @dev Set the prices of the token token pairs. Must be called by the owner.
+    function setPrices(
         address[] calldata token0s,
         address[] calldata token1s,
         uint256[] calldata prices
