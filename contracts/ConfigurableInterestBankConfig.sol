@@ -72,8 +72,6 @@ contract ConfigurableInterestBankConfig is BankConfig, Ownable {
     }
 
     /// @dev Set the configuration for the given goblins. Must only be called by the owner.
-    /// @param addrs TODO
-    /// @param configs TODO
     function setGoblins(address[] calldata addrs, GoblinConfig[] calldata configs) external onlyOwner {
         require(addrs.length == configs.length, "bad length");
         for (uint256 idx = 0; idx < addrs.length; idx++) {
