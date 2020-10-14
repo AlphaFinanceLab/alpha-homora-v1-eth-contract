@@ -56,8 +56,8 @@ contract UniswapGoblinConfig is Ownable {
         (uint256 r0, uint256 r1,) = lp.getReserves();
         uint256 t0bal = token0.balanceOf(address(lp));
         uint256 t1bal = token1.balanceOf(address(lp));
-        require(t0bal <= r0.mul(101).div(100), "bad t0 balance");
-        require(t1bal <= r1.mul(101).div(100), "bad t1 balance");
+        require(t0bal.mul(100) <= r0.mul(101), "bad t0 balance");
+        require(t1bal.mul(100) <= r1.mul(101), "bad t1 balance");
         // 2. Check that price is in the acceptable range
         (uint256 price, uint256 lastUpdate) = oracle.getPrice(token0, token1);
         require(lastUpdate >= now - 3 days, "price too stale");
