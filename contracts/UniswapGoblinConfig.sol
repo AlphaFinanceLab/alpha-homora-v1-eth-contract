@@ -22,7 +22,7 @@ contract UniswapGoblinConfig is Ownable {
     }
 
     PriceOracle public oracle;
-    mapping (address => Config) goblins;
+    mapping (address => Config) public goblins;
 
     constructor(PriceOracle _oracle) public {
         oracle = _oracle;
