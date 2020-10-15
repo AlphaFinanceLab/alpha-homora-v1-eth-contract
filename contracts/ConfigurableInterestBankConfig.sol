@@ -2,13 +2,13 @@ pragma solidity 0.5.16;
 import "openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol";
 import "./BankConfig.sol";
+import "./GoblinConfig.sol";
 
 
 interface InterestModel {
     /// @dev Return the interest rate per second, using 1e18 as denom.
     function getInterestRate(uint256 debt, uint256 floating) external view returns (uint256);
 }
-
 
 contract TripleSlopeModel {
     using SafeMath for uint256;
@@ -34,14 +34,6 @@ contract TripleSlopeModel {
 }
 
 contract ConfigurableInterestBankConfig is BankConfig, Ownable {
-    /// @notice Configuration for each goblin.
-    struct GoblinConfig {
-        bool isGoblin;
-        bool acceptDebt;
-        uint256 workFactor;
-        uint256 killFactor;
-    }
-
     /// The minimum ETH debt size per position.
     uint256 public minDebtSize;
     /// The portion of interests allocated to the reserve pool.
@@ -79,25 +71,12 @@ contract ConfigurableInterestBankConfig is BankConfig, Ownable {
         interestModel = _interestModel;
     }
 
-    /// @dev Set the configuration for the given goblin. Must only be called by the owner.
-    /// @param goblin The goblin address to set configuration.
-    /// @param _isGoblin Whether the given address is a valid goblin.
-    /// @param _acceptDebt Whether the goblin is accepting new debts.
-    /// @param _workFactor The work factor value for this goblin.
-    /// @param _killFactor The kill factor value for this goblin.
-    function setGoblin(
-        address goblin,
-        bool _isGoblin,
-        bool _acceptDebt,
-        uint256 _workFactor,
-        uint256 _killFactor
-    ) public onlyOwner {
-        goblins[goblin] = GoblinConfig({
-            isGoblin: _isGoblin,
-            acceptDebt: _acceptDebt,
-            workFactor: _workFactor,
-            killFactor: _killFactor
-        });
+    /// @dev Set the configuration for the given goblins. Must only be called by the owner.
+    function setGoblins(address[] calldata addrs, GoblinConfig[] calldata configs) external onlyOwner {
+        require(addrs.length == configs.length, "bad length");
+        for (uint256 idx = 0; idx < addrs.length; idx++) {
+            goblins[addrs[idx]] = configs[idx];
+        }
     }
 
     /// @dev Return the interest rate per second, using 1e18 as denom.
@@ -107,24 +86,21 @@ contract ConfigurableInterestBankConfig is BankConfig, Ownable {
 
     /// @dev Return whether the given address is a goblin.
     function isGoblin(address goblin) external view returns (bool) {
-        return goblins[goblin].isGoblin;
+        return address(goblins[goblin]) != address(0);
     }
 
     /// @dev Return whether the given goblin accepts more debt. Revert on non-goblin.
     function acceptDebt(address goblin) external view returns (bool) {
-        require(goblins[goblin].isGoblin, "!goblin");
-        return goblins[goblin].acceptDebt;
+        return goblins[goblin].acceptDebt(goblin);
     }
 
     /// @dev Return the work factor for the goblin + ETH debt, using 1e4 as denom. Revert on non-goblin.
-    function workFactor(address goblin, uint256 /* debt */) external view returns (uint256) {
-        require(goblins[goblin].isGoblin, "!goblin");
-        return goblins[goblin].workFactor;
+    function workFactor(address goblin, uint256 debt) external view returns (uint256) {
+        return goblins[goblin].workFactor(goblin, debt);
     }
 
     /// @dev Return the kill factor for the goblin + ETH debt, using 1e4 as denom. Revert on non-goblin.
-    function killFactor(address goblin, uint256 /* debt */) external view returns (uint256) {
-        require(goblins[goblin].isGoblin, "!goblin");
-        return goblins[goblin].killFactor;
+    function killFactor(address goblin, uint256 debt) external view returns (uint256) {
+        return goblins[goblin].killFactor(goblin, debt);
     }
 }
