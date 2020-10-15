@@ -3,6 +3,7 @@ pragma experimental ABIEncoderV2;
 import "openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
+import "./GoblinConfig.sol";
 import "./PriceOracle.sol";
 import "./SafeToken.sol";
 
@@ -10,7 +11,7 @@ interface IUniswapGoblin {
     function lpToken() external view returns (IUniswapV2Pair);
 }
 
-contract UniswapGoblinConfig is Ownable {
+contract UniswapGoblinConfig is Ownable, GoblinConfig {
     using SafeToken for address;
     using SafeMath for uint256;
 
@@ -76,13 +77,13 @@ contract UniswapGoblinConfig is Ownable {
     }
 
     /// @dev Return the work factor for the goblin + ETH debt, using 1e4 as denom.
-    function workFactor(address goblin/* , uint256 debt */) external view returns (uint256) {
+    function workFactor(address goblin, uint256 /* debt */) external view returns (uint256) {
         require(isStable(goblin), "!stable");
         return uint256(goblins[goblin].workFactor);
     }
 
     /// @dev Return the kill factor for the goblin + ETH debt, using 1e4 as denom.
-    function killFactor(address goblin/* , uint256 debt */) external view returns (uint256) {
+    function killFactor(address goblin, uint256 /* debt */) external view returns (uint256) {
         require(isStable(goblin), "!stable");
         return uint256(goblins[goblin].killFactor);
     }
