@@ -203,10 +203,11 @@ contract('UniswapBank', ([deployer, alice, bob, eve]) => {
     await time.increase(time.duration.days(1));
     await this.bank.deposit(); // Random action to trigger interest computation
     assertAlmostEqual('3972004999999927424', await this.bank.totalETH());
-    assertAlmostEqual('99988133540000000000', await web3.eth.getBalance(eve));
+
+    const eveBefore = await web3.eth.getBalance(eve);
     // Now you can liquidate because of the insane interest rate
     await this.bank.kill('1', { from: eve });
-    assertAlmostEqual('100237911439637267843', await web3.eth.getBalance(eve));
+    expect(await web3.eth.getBalance(eve)).to.be.bignumber.gt(eveBefore); //Should get rewards
     assertAlmostEqual('4079999999999919360', await web3.eth.getBalance(this.bank.address));
     assert.equal('0', await this.bank.glbDebtVal());
     assertAlmostEqual('108000555555547491', await this.bank.reservePool());
@@ -296,7 +297,7 @@ contract('UniswapBank', ([deployer, alice, bob, eve]) => {
 
     // Alice withdraws 2 gETH
     aliceBefore = new BN(await web3.eth.getBalance(alice));
-    await this.bank.withdraw('2000000000000000000', { from: alice, gasPrice: 0 });
+    await this.bank.withdraw(await this.bank.balanceOf(alice), { from: alice, gasPrice: 0 });
     aliceAfter = new BN(await web3.eth.getBalance(alice));
 
     // alice gots 2/12 * 10.002702699312215556 = 1.667117116552036

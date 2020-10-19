@@ -124,8 +124,14 @@ contract('StrategyWithdrawMinimizeTrading', ([deployer, alice, bob]) => {
           bob,
           '2000000000000000000', // debt 2 ETH
           web3.eth.abi.encodeParameters(
-            ['address', 'uint256'],
-            [this.token.address, web3.utils.toWei('0.001', 'ether')]
+            ['address', 'bytes'],
+            [
+              this.strat.address,
+              web3.eth.abi.encodeParameters(
+                ['address', 'uint256'],
+                [this.token.address, web3.utils.toWei('0.001', 'ether')]
+              ),
+            ]
           ),
           {
             from: bob,
