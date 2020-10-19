@@ -1,6 +1,10 @@
 {
   "scripts": {
     "compile5": "buidler typechain --config buidler.config.js",
+    "compile6": "buidler typechain --config buidler.config.6.js",
+    "compile": "buidler typechain --config buidler.config.js && buidler typechain --config buidler.config.6.js",
+    "test:sushi": "buidler test ./test/SushiswapBank.test.ts",
+    "test:sushi12": "buidler test ./test/SushiswapPool12Bank.test.ts",
     "test:uni": "buidler test ./test/UniswapBank.test.js",
     "test:add": "buidler test ./test/StrategyAddETHOnly.test.js",
     "test:liquidate": "buidler test ./test/StrategyLiquidate.test.js",
