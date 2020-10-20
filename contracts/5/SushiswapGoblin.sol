@@ -46,8 +46,7 @@ contract SushiswapGoblin is Ownable, ReentrancyGuard, Goblin {
         address _operator,
         IMasterChef _masterChef,
         IUniswapV2Router02 _router,
-        uint256 _pid,
-        address _sushi,
+        uint256 _pid,        
         Strategy _addStrat,
         Strategy _liqStrat,
         uint256 _reinvestBountyBps
@@ -64,7 +63,7 @@ contract SushiswapGoblin is Ownable, ReentrancyGuard, Goblin {
         address token0 = lpToken.token0();
         address token1 = lpToken.token1();
         fToken = token0 == weth ? token1 : token0;
-        sushi = _sushi;
+        sushi = address(masterChef.sushi());
         addStrat = _addStrat;
         liqStrat = _liqStrat;
         okStrats[address(addStrat)] = true;
@@ -73,7 +72,7 @@ contract SushiswapGoblin is Ownable, ReentrancyGuard, Goblin {
         lpToken.approve(address(_masterChef), uint256(-1)); // 100% trust in the staking pool
         lpToken.approve(address(router), uint256(-1)); // 100% trust in the router
         fToken.safeApprove(address(router), uint256(-1)); // 100% trust in the router
-        _sushi.safeApprove(address(router), uint256(-1)); // 100% trust in the router
+        sushi.safeApprove(address(router), uint256(-1)); // 100% trust in the router
     }
 
     /// @dev Require that the caller must be an EOA account to avoid flash loans.
@@ -106,9 +105,8 @@ contract SushiswapGoblin is Ownable, ReentrancyGuard, Goblin {
 
     /// @dev Re-invest whatever this worker has earned back to staked LP tokens.
     function reinvest() public onlyEOA nonReentrant {
-        // 1. Withdraw all the rewards.
-        (uint256 totalBalance, ) = masterChef.userInfo(pid, address(this));
-        masterChef.withdraw(pid, totalBalance);
+        // 1. Withdraw all the rewards.        
+        masterChef.withdraw(pid, 0);
         uint256 reward = sushi.balanceOf(address(this));
         if (reward == 0) return;
         // 2. Send the reward bounty to the caller.
@@ -168,13 +166,15 @@ contract SushiswapGoblin is Ownable, ReentrancyGuard, Goblin {
         uint256 lpBalance = shareToBalance(shares[id]);
         uint256 lpSupply = lpToken.totalSupply(); // Ignore pending mintFee as it is insignificant
         // 2. Get the pool's total supply of WETH and farming token.
-        uint256 totalWETH = weth.balanceOf(address(lpToken));
-        uint256 totalfToken = fToken.balanceOf(address(lpToken));
+        (uint256 r0, uint256 r1,) = lpToken.getReserves();
+        (uint256 totalWETH, uint256 totalfToken) = lpToken.token0() == weth ? (r0, r1) : (r1, r0);
         // 3. Convert the position's LP tokens to the underlying assets.
         uint256 userWETH = lpBalance.mul(totalWETH).div(lpSupply);
         uint256 userfToken = lpBalance.mul(totalfToken).div(lpSupply);
         // 4. Convert all farming tokens to ETH and return total ETH.
-        return getMktSellAmount(userfToken, totalfToken.sub(userfToken), totalWETH.sub(userWETH)).add(userWETH);
+        return getMktSellAmount(
+            userfToken, totalfToken.sub(userfToken), totalWETH.sub(userWETH)
+        ).add(userWETH);
     }
 
     /// @dev Liquidate the given position by converting it to ETH and return back to caller.

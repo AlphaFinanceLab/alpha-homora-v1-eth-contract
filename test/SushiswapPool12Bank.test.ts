@@ -4,6 +4,7 @@ import {
   UniswapV2FactoryInstance,
   UniswapV2Router02Instance,
   UniswapV2PairInstance,
+  StrategyAllEthOnlyInstance,
   StrategyAddTwoSidesOptimalInstance,
   StrategyLiquidateInstance,
   BankInstance,
@@ -17,6 +18,7 @@ const MasterChef = artifacts.require('MasterChef');
 const UniswapV2Factory = artifacts.require('UniswapV2Factory');
 const UniswapV2Router02 = artifacts.require('UniswapV2Router02');
 const UniswapV2Pair = artifacts.require('UniswapV2Pair');
+const StrategyAllETHOnly = artifacts.require('StrategyAllETHOnly');
 const StrategyAddTwoSidesOptimal = artifacts.require('StrategyAddTwoSidesOptimal');
 const StrategyLiquidate = artifacts.require('StrategyLiquidate');
 const Bank = artifacts.require('Bank');
@@ -25,7 +27,7 @@ const SushiswapPool12Goblin = artifacts.require('SushiswapPool12Goblin');
 
 const WETH = artifacts.require('WETH');
 
-const { expectRevert, time, BN, ether } = require('@openzeppelin/test-helpers');
+const { expectRevert, time, BN, ether, constants } = require('@openzeppelin/test-helpers');
 
 // Assert that actual is less than 0.01% difference from expected
 function assertAlmostEqual(expected: string | BN, actual: string | BN) {
@@ -52,14 +54,13 @@ contract('SushiswapPool12Bank', ([deployer, alice, bob, eve]) => {
   const MIN_DEBT_SIZE = ether('1'); // 1 ETH min debt size
   const WORK_FACTOR = new BN('7000');
   const KILL_FACTOR = new BN('8000');
-  const address0 = '0x0000000000000000000000000000000000000000'; //address 0
 
   let factory: UniswapV2FactoryInstance;
   let weth: WethInstance;
   let router: UniswapV2Router02Instance;
   let sushi: SushiTokenInstance;
   let lp: UniswapV2PairInstance;
-  let addStrat: StrategyAddTwoSidesOptimalInstance;
+  let addStrat: StrategyAllEthOnlyInstance;
   let liqStrat: StrategyLiquidateInstance;
   let config: SimpleBankConfigInstance;
   let bank: BankInstance;
@@ -75,7 +76,7 @@ contract('SushiswapPool12Bank', ([deployer, alice, bob, eve]) => {
     await sushi.mint(deployer, web3.utils.toWei('200', 'ether'));
     await factory.createPair(weth.address, sushi.address);
     lp = await UniswapV2Pair.at(await factory.getPair(sushi.address, weth.address));
-    addStrat = await StrategyAddTwoSidesOptimal.new(router.address);
+    addStrat = await StrategyAllETHOnly.new(router.address);
     liqStrat = await StrategyLiquidate.new(router.address);
     config = await SimpleBankConfig.new(MIN_DEBT_SIZE, INTEREST_RATE, RESERVE_POOL_BPS, KILL_PRIZE_BPS);
     bank = await Bank.new(config.address);
@@ -85,7 +86,7 @@ contract('SushiswapPool12Bank', ([deployer, alice, bob, eve]) => {
     // Add mock masterChef's pool
     poolId = 12;
     for (let _ of Array.from(Array(poolId).keys())) {
-      await masterChef.add(0, address0, false);
+      await masterChef.add(0, constants.ZERO_ADDRESS, false);
     }
     // Add lp to masterChef's pool
     await masterChef.add(1, lp.address, false);
@@ -93,12 +94,16 @@ contract('SushiswapPool12Bank', ([deployer, alice, bob, eve]) => {
       bank.address,
       masterChef.address,
       router.address,
-      sushi.address,
       addStrat.address,
       liqStrat.address,
       REINVEST_BOUNTY_BPS
     );
     await config.setGoblin(goblin.address, true, true, WORK_FACTOR, KILL_FACTOR);
+
+    const twoSideStrat = await StrategyAddTwoSidesOptimal.new(router.address, goblin.address);
+    await goblin.setStrategyOk([twoSideStrat.address], true);
+    await goblin.setCriticalStrategies(twoSideStrat.address, liqStrat.address);
+
     // Deployer adds 1e17 MOCK + 1e18 WEI
     await sushi.approve(router.address, ether('0.1'));
     await router.addLiquidityETH(sushi.address, ether('0.1'), '0', '0', deployer, FOREVER, {
@@ -108,7 +113,7 @@ contract('SushiswapPool12Bank', ([deployer, alice, bob, eve]) => {
 
   it('should has MOCK as fToken in SushiswapGoblin', async () => {
     // Deployer sends some LP tokens to Alice and Bob
-    expect(await goblin.fToken()).to.be.equal(sushi.address);
+    expect(await goblin.sushi()).to.be.equal(sushi.address);
   });
 
   it('should give rewards out when you stake LP tokens', async () => {

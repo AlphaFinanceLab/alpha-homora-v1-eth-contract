@@ -16,13 +16,26 @@ contract StrategyAddTwoSidesOptimal is Ownable, ReentrancyGuard, Strategy {
     IUniswapV2Factory public factory;
     IUniswapV2Router02 public router;
     address public weth;
+    address public goblin;
 
-    /// @dev Create a new liquidate strategy instance.
+    /// @dev Create a new add two-side optimal strategy instance.
     /// @param _router The Uniswap router smart contract.
-    constructor(IUniswapV2Router02 _router) public {
+    constructor(IUniswapV2Router02 _router, address _goblin) public {
         factory = IUniswapV2Factory(_router.factory());
         router = _router;
         weth = _router.WETH();
+        goblin = _goblin;
+    }
+    
+    /// @dev Throws if called by any account other than the goblin.
+    modifier onlyGoblin() {
+        require(isGoblin(), "caller is not the goblin");
+        _;
+    }
+
+    /// @dev Returns true if the caller is the current goblin.
+    function isGoblin() public view returns (bool) {
+        return msg.sender == goblin;
     }
 
     /// @dev Compute optimal deposit amount
@@ -75,21 +88,29 @@ contract StrategyAddTwoSidesOptimal is Ownable, ReentrancyGuard, Strategy {
     /// @dev Execute worker strategy. Take LP tokens + ETH. Return LP tokens + ETH.
     /// @param user User address
     /// @param data Extra calldata information passed along to this strategy.
-    function execute(
-        address user,
-        uint256, /* debt */
-        bytes calldata data
-    ) external payable nonReentrant {
+    function execute(address user, uint256, /* debt */ bytes calldata data) 
+        external         
+        payable  
+        onlyGoblin       
+        nonReentrant 
+    {
         // 1. Find out what farming token we are dealing with.
-        (address fToken, uint256 fAmount) = abi.decode(data, (address, uint256));
-        IUniswapV2Pair lpToken = IUniswapV2Pair(factory.getPair(fToken, weth));
-        // 2. Compute the optimal amount of ETH and farming tokens.
-        fToken.safeTransferFrom(user, address(this), fAmount);
+        (address fToken, uint256 fAmount, uint256 minLPAmount) = abi.decode(data, (address, uint256, uint256));
+        IUniswapV2Pair lpToken = IUniswapV2Pair(factory.getPair(fToken, weth));        
+        // 2. Compute the optimal amount of ETH and fToken to be converted.  
+        if (fAmount > 0) {  
+            fToken.safeTransferFrom(user, address(this), fAmount);            
+        }
         uint256 ethBalance = address(this).balance;
-        (uint256 r0, uint256 r1, ) = lpToken.getReserves();
-        (uint256 ethReserve, uint256 fReserve) = lpToken.token0() == weth ? (r0, r1) : (r1, r0);
-        (uint256 swapAmt, bool isReversed) = optimalDeposit(ethBalance, fAmount, ethReserve, fReserve);
+        uint256 swapAmt;
+        bool isReversed;
+        {
+            (uint256 r0, uint256 r1, ) = lpToken.getReserves();
+            (uint256 ethReserve, uint256 fReserve) = lpToken.token0() == weth ? (r0, r1) : (r1, r0);
+            (swapAmt, isReversed) = optimalDeposit(ethBalance, fToken.myBalance(), ethReserve, fReserve);
+        }
         // 3. Convert between ETH and farming tokens
+        fToken.safeApprove(address(router), 0);
         fToken.safeApprove(address(router), uint256(-1));
         address[] memory path = new address[](2);
         (path[0], path[1]) = isReversed ? (fToken, weth) : (weth, fToken);
@@ -99,7 +120,10 @@ contract StrategyAddTwoSidesOptimal is Ownable, ReentrancyGuard, Strategy {
             router.swapExactETHForTokens.value(swapAmt)(0, path, address(this), now); // ETH to farming tokens
         }
         // 4. Mint more LP tokens and return all LP tokens to the sender.
-        router.addLiquidityETH.value(address(this).balance)(fToken, fToken.myBalance(), 0, 0, address(this), now);
+        (,, uint256 moreLPAmount) = router.addLiquidityETH.value(address(this).balance)(
+            fToken, fToken.myBalance(), 0, 0, address(this), now
+        );
+        require(moreLPAmount >= minLPAmount, "insufficient LP tokens received");
         lpToken.transfer(msg.sender, lpToken.balanceOf(address(this)));
     }
 
@@ -107,11 +131,7 @@ contract StrategyAddTwoSidesOptimal is Ownable, ReentrancyGuard, Strategy {
     /// @param token The token contract. Can be anything. This contract should not hold ERC20 tokens.
     /// @param to The address to send the tokens to.
     /// @param value The number of tokens to transfer to `to`.
-    function recover(
-        address token,
-        address to,
-        uint256 value
-    ) external onlyOwner nonReentrant {
+    function recover(address token, address to, uint256 value) external onlyOwner nonReentrant {
         token.safeTransfer(to, value);
     }
 

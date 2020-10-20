@@ -94,7 +94,6 @@ contract('SushiswapBank', ([deployer, alice, bob, eve]) => {
       masterChef.address,
       router.address,
       poolId,
-      sushi.address,
       addStrat.address,
       liqStrat.address,
       REINVEST_BOUNTY_BPS

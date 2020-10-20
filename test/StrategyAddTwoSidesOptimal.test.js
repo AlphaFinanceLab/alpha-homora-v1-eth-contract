@@ -10,7 +10,7 @@ const { expectRevert } = require('@openzeppelin/test-helpers');
 const { expect } = require('chai');
 const { BN } = require('@openzeppelin/test-helpers');
 
-contract('StrategyAddTwoSidesOptimal', ([deployer, alice, bob]) => {
+contract('StrategyAddTwoSidesOptimal', ([deployer, alice, bob, goblin]) => {
   const MAX_ROUNDING_ERROR = '4';
 
   beforeEach(async () => {
@@ -22,7 +22,7 @@ contract('StrategyAddTwoSidesOptimal', ([deployer, alice, bob]) => {
     await this.token.mint(bob, web3.utils.toWei('0.1', 'ether'));
     await this.factory.createPair(this.weth.address, this.token.address);
     this.lp = await MockUniswapV2Pair.at(await this.factory.getPair(this.token.address, this.weth.address));
-    this.strat = await StrategyAddTwoSidesOptimal.new(this.router.address);
+    this.strat = await StrategyAddTwoSidesOptimal.new(this.router.address, goblin);
     // Alice adds 1e17 MOCK + 1e18 WEI
     await this.token.approve(this.router.address, web3.utils.toWei('0.1', 'ether'), {
       from: alice,
@@ -33,12 +33,37 @@ contract('StrategyAddTwoSidesOptimal', ([deployer, alice, bob]) => {
     });
   });
 
+  it('should only allow goblin to call execute', async () => {
+    await expectRevert(
+      this.strat.execute(
+        bob,
+        '0',
+        web3.eth.abi.encodeParameters(['address', 'uint256', 'uint256'], [this.token.address, '0', '0']),
+        {
+          value: web3.utils.toWei('0.1', 'ether'),
+          from: bob,
+        }
+      ),
+      'caller is not the goblin'
+    );
+
+    await this.strat.execute(
+      bob,
+      '0',
+      web3.eth.abi.encodeParameters(['address', 'uint256', 'uint256'], [this.token.address, '0', '0']),
+      {
+        value: web3.utils.toWei('0.1', 'ether'),
+        from: goblin,
+      }
+    );
+  });
+
   it('should revert on bad calldata', async () => {
     // Bob passes some bad calldata that can't be decoded
     await expectRevert(
       this.strat.execute(bob, '0', '0x1234', {
         value: web3.utils.toWei('0.1', 'ether'),
-        from: bob,
+        from: goblin,
       }),
       'revert'
     );
@@ -49,30 +74,30 @@ contract('StrategyAddTwoSidesOptimal', ([deployer, alice, bob]) => {
     await this.strat.execute(
       bob,
       '0',
-      web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0']),
+      web3.eth.abi.encodeParameters(['address', 'uint256', 'uint256'], [this.token.address, '0', '10000000000000000']),
       {
         value: web3.utils.toWei('0.1', 'ether'),
-        from: bob,
+        from: goblin,
       }
     );
-    const bobBefore = await this.lp.balanceOf(bob);
-    expect(bobBefore).to.be.bignumber.above('0');
+    const goblinBefore = await this.lp.balanceOf(goblin);
+    expect(goblinBefore).to.be.bignumber.above('0');
     expect(await this.lp.balanceOf(this.strat.address)).to.be.bignumber.equal('0');
     expect(await this.token.balanceOf(this.strat.address)).to.be.bignumber.below(MAX_ROUNDING_ERROR);
     // Bob uses AddTwoSidesOptimal strategy to add another 1e17 WEI
-    await this.lp.transfer(this.strat.address, bobBefore, {
-      from: bob,
+    await this.lp.transfer(this.strat.address, goblinBefore, {
+      from: goblin,
     });
     await this.strat.execute(
       bob,
       '0',
-      web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, '0']),
+      web3.eth.abi.encodeParameters(['address', 'uint256', 'uint256'], [this.token.address, '0', '10000000000000000']),
       {
         value: web3.utils.toWei('0.1', 'ether'),
-        from: bob,
+        from: goblin,
       }
     );
-    expect(await this.lp.balanceOf(bob)).to.be.bignumber.above(bobBefore);
+    expect(await this.lp.balanceOf(goblin)).to.be.bignumber.above(goblinBefore);
     expect(await this.lp.balanceOf(this.strat.address)).to.be.bignumber.equal('0');
     expect(await this.token.balanceOf(this.strat.address)).to.be.bignumber.below(new BN(MAX_ROUNDING_ERROR * 2));
   });
@@ -85,13 +110,16 @@ contract('StrategyAddTwoSidesOptimal', ([deployer, alice, bob]) => {
     await this.strat.execute(
       bob,
       '0',
-      web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0.05', 'ether')]),
+      web3.eth.abi.encodeParameters(
+        ['address', 'uint256', 'uint256'],
+        [this.token.address, web3.utils.toWei('0.05', 'ether'), '10000000000000000']
+      ),
       {
-        from: bob,
+        from: goblin,
       }
     );
-    const bobBefore = await this.lp.balanceOf(bob);
-    expect(await this.lp.balanceOf(bob)).to.be.bignumber.above('0');
+    const goblinBefore = await this.lp.balanceOf(goblin);
+    expect(await this.lp.balanceOf(goblin)).to.be.bignumber.above('0');
     expect(await this.lp.balanceOf(this.strat.address)).to.be.bignumber.equal('0');
     expect(await this.token.balanceOf(this.strat.address)).to.be.bignumber.below(MAX_ROUNDING_ERROR);
     // Bob uses AddTwoSidesOptimal strategy to add another 1e17 WEI
@@ -104,12 +132,15 @@ contract('StrategyAddTwoSidesOptimal', ([deployer, alice, bob]) => {
     await this.strat.execute(
       bob,
       '0',
-      web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0.05', 'ether')]),
+      web3.eth.abi.encodeParameters(
+        ['address', 'uint256', 'uint256'],
+        [this.token.address, web3.utils.toWei('0.05', 'ether'), '10000000000000000']
+      ),
       {
-        from: bob,
+        from: goblin,
       }
     );
-    expect(await this.lp.balanceOf(bob)).to.be.bignumber.above(bobBefore);
+    expect(await this.lp.balanceOf(goblin)).to.be.bignumber.above(goblinBefore);
     expect(await this.lp.balanceOf(this.strat.address)).to.be.bignumber.equal('0');
     expect(await this.token.balanceOf(this.strat.address)).to.be.bignumber.below(new BN(MAX_ROUNDING_ERROR * 2));
   });
@@ -122,16 +153,41 @@ contract('StrategyAddTwoSidesOptimal', ([deployer, alice, bob]) => {
     await this.strat.execute(
       bob,
       '0',
-      web3.eth.abi.encodeParameters(['address', 'uint256'], [this.token.address, web3.utils.toWei('0.05', 'ether')]),
+      web3.eth.abi.encodeParameters(
+        ['address', 'uint256', 'uint256'],
+        [this.token.address, web3.utils.toWei('0.05', 'ether'), '10000000000000000']
+      ),
       {
         value: web3.utils.toWei('0.1', 'ether'),
-        from: bob,
+        from: goblin,
       }
     );
-    const bobBefore = await this.lp.balanceOf(bob);
-    expect(bobBefore).to.be.bignumber.above('0');
+    const goblinBefore = await this.lp.balanceOf(goblin);
+    expect(goblinBefore).to.be.bignumber.above('0');
     expect(await this.lp.balanceOf(this.strat.address)).to.be.bignumber.equal('0');
     expect(await this.token.balanceOf(this.strat.address)).to.be.bignumber.below(MAX_ROUNDING_ERROR);
+    // Bob uses AddTwoSidesOptimal strategy to add another 1e17 WEI
+    await this.lp.transfer(this.strat.address, await this.lp.balanceOf(bob), {
+      from: bob,
+    });
+    await this.token.approve(this.strat.address, web3.utils.toWei('0.05', 'ether'), {
+      from: bob,
+    });
+    await this.strat.execute(
+      bob,
+      '0',
+      web3.eth.abi.encodeParameters(
+        ['address', 'uint256', 'uint256'],
+        [this.token.address, web3.utils.toWei('0.05', 'ether'), '10000000000000000']
+      ),
+      {
+        value: web3.utils.toWei('0.1', 'ether'),
+        from: goblin,
+      }
+    );
+    expect(await this.lp.balanceOf(goblin)).to.be.bignumber.above(goblinBefore);
+    expect(await this.lp.balanceOf(this.strat.address)).to.be.bignumber.equal('0');
+    expect(await this.token.balanceOf(this.strat.address)).to.be.bignumber.below(new BN(MAX_ROUNDING_ERROR * 2));
   });
 
   it('should only allow owner to withdraw loss ERC20 tokens', async () => {

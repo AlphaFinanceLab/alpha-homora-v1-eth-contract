@@ -12,6 +12,8 @@ import "./SafeToken.sol";
 import "./Goblin.sol";
 import "./interfaces/IMasterChef.sol";
 
+// SushiswapPool12Goblin is specific for SUSHI-ETH pool in Sushiswap.
+// In this case, fToken = SUSHI and pid = 12.
 contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
     /// @notice Libraries
     using SafeToken for address;
@@ -28,8 +30,7 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
     IUniswapV2Factory public factory;
     IUniswapV2Router02 public router;
     IUniswapV2Pair public lpToken;
-    address public weth;
-    address public fToken;
+    address public weth;    
     address public sushi;
     address public operator;
     uint256 public pid;
@@ -45,8 +46,7 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
     constructor(
         address _operator,
         IMasterChef _masterChef,
-        IUniswapV2Router02 _router,
-        address _sushi,
+        IUniswapV2Router02 _router,        
         Strategy _addStrat,
         Strategy _liqStrat,
         uint256 _reinvestBountyBps
@@ -55,16 +55,11 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
         weth = _router.WETH();
         masterChef = _masterChef;
         router = _router;
-        factory = IUniswapV2Factory(_router.factory());
-        // Get lpToken and fToken from MasterChef pool
+        factory = IUniswapV2Factory(_router.factory());        
         pid = 12;
         (IERC20 _lpToken, , , ) = masterChef.poolInfo(pid);
-        lpToken = IUniswapV2Pair(address(_lpToken));
-        address token0 = lpToken.token0();
-        address token1 = lpToken.token1();
-        fToken = token0 == weth ? token1 : token0;
-        sushi = _sushi;
-        require(fToken == sushi, "fToken is not sushi");
+        lpToken = IUniswapV2Pair(address(_lpToken));     
+        sushi = address(masterChef.sushi());      
         addStrat = _addStrat;
         liqStrat = _liqStrat;
         okStrats[address(addStrat)] = true;
@@ -72,8 +67,7 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
         reinvestBountyBps = _reinvestBountyBps;
         lpToken.approve(address(_masterChef), uint256(-1)); // 100% trust in the staking pool
         lpToken.approve(address(router), uint256(-1)); // 100% trust in the router
-        fToken.safeApprove(address(router), uint256(-1)); // 100% trust in the router
-        _sushi.safeApprove(address(addStrat), uint256(-1)); // 100% trust in the addStrat
+        sushi.safeApprove(address(router), uint256(-1)); // 100% trust in the router        
     }
 
     /// @dev Require that the caller must be an EOA account to avoid flash loans.
@@ -106,16 +100,17 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
 
     /// @dev Re-invest whatever this worker has earned back to staked LP tokens.
     function reinvest() public onlyEOA nonReentrant {
-        // 1. Withdraw all the rewards.
-        (uint256 totalBalance, ) = masterChef.userInfo(pid, address(this));
-        masterChef.withdraw(pid, totalBalance);
-        uint256 reward = sushi.balanceOf(address(this));
+        // 1. Withdraw all the rewards.        
+        masterChef.withdraw(pid, 0);
+        uint256 reward = sushi.balanceOf(address(this));        
         if (reward == 0) return;
         // 2. Send the reward bounty to the caller.
-        uint256 bounty = reward.mul(reinvestBountyBps) / 10000;
+        uint256 bounty = reward.mul(reinvestBountyBps) / 10000;        
         sushi.safeTransfer(msg.sender, bounty);
-        // 3. Use add Two-side strategy to convert all fToken to LP tokens.
-        addStrat.execute(address(this), 0, abi.encode(fToken, reward.sub(bounty)));
+        // 3. Use add Two-side optimal strategy to convert sushi to ETH and add 
+        // liquidity to get LP tokens.
+        sushi.safeTransfer(address(addStrat), reward.sub(bounty));
+        addStrat.execute(address(this), 0, abi.encode(sushi, 0, 0));
         // 4. Mint more LP tokens and stake them for more rewards.
         masterChef.deposit(pid, lpToken.balanceOf(address(this)));
         emit Reinvest(msg.sender, reward, bounty);
@@ -163,13 +158,15 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
         uint256 lpBalance = shareToBalance(shares[id]);
         uint256 lpSupply = lpToken.totalSupply(); // Ignore pending mintFee as it is insignificant
         // 2. Get the pool's total supply of WETH and farming token.
-        uint256 totalWETH = weth.balanceOf(address(lpToken));
-        uint256 totalfToken = fToken.balanceOf(address(lpToken));
+        (uint256 r0, uint256 r1,) = lpToken.getReserves();
+        (uint256 totalWETH, uint256 totalSushi) = lpToken.token0() == weth ? (r0, r1) : (r1, r0);
         // 3. Convert the position's LP tokens to the underlying assets.
         uint256 userWETH = lpBalance.mul(totalWETH).div(lpSupply);
-        uint256 userfToken = lpBalance.mul(totalfToken).div(lpSupply);
+        uint256 userSushi = lpBalance.mul(totalSushi).div(lpSupply);
         // 4. Convert all farming tokens to ETH and return total ETH.
-        return getMktSellAmount(userfToken, totalfToken.sub(userfToken), totalWETH.sub(userWETH)).add(userWETH);
+        return getMktSellAmount(
+            userSushi, totalSushi.sub(userSushi), totalWETH.sub(userWETH)
+        ).add(userWETH);
     }
 
     /// @dev Liquidate the given position by converting it to ETH and return back to caller.
@@ -178,7 +175,7 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
         // 1. Convert the position back to LP tokens and use liquidate strategy.
         _removeShare(id);
         lpToken.transfer(address(liqStrat), lpToken.balanceOf(address(this)));
-        liqStrat.execute(address(0), 0, abi.encode(fToken, 0));
+        liqStrat.execute(address(0), 0, abi.encode(sushi, 0));
         // 2. Return all available ETH back to the operator.
         uint256 wad = address(this).balance;
         SafeToken.safeTransferETH(msg.sender, wad);
