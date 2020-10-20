@@ -33,7 +33,7 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
     address public weth;    
     address public sushi;
     address public operator;
-    uint256 public pid;
+    uint256 public constant pid = 12;
 
     /// @notice Mutable state variables
     mapping(uint256 => uint256) public shares;
@@ -55,8 +55,7 @@ contract SushiswapPool12Goblin is Ownable, ReentrancyGuard, Goblin {
         weth = _router.WETH();
         masterChef = _masterChef;
         router = _router;
-        factory = IUniswapV2Factory(_router.factory());        
-        pid = 12;
+        factory = IUniswapV2Factory(_router.factory());                
         (IERC20 _lpToken, , , ) = masterChef.poolInfo(pid);
         lpToken = IUniswapV2Pair(address(_lpToken));     
         sushi = address(masterChef.sushi());      
