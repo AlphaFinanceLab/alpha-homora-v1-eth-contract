@@ -1,5 +1,8 @@
 /.vscode/
 /build/
 /node_modules/
+/typechain/
+/artifacts/
+/cache/
 .DS_Store
 *.swp
