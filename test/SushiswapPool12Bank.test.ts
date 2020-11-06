@@ -4,13 +4,13 @@ import {
   UniswapV2FactoryInstance,
   UniswapV2Router02Instance,
   UniswapV2PairInstance,
-  StrategyAllEthOnlyInstance,
+  StrategyAllETHOnlyInstance,
   StrategyAddTwoSidesOptimalInstance,
   StrategyLiquidateInstance,
   BankInstance,
   SimpleBankConfigInstance,
   SushiswapPool12GoblinInstance,
-  WethInstance,
+  WETHInstance,
 } from '../typechain';
 
 const SushiToken = artifacts.require('SushiToken');
@@ -56,11 +56,11 @@ contract('SushiswapPool12Bank', ([deployer, alice, bob, eve]) => {
   const KILL_FACTOR = new BN('8000');
 
   let factory: UniswapV2FactoryInstance;
-  let weth: WethInstance;
+  let weth: WETHInstance;
   let router: UniswapV2Router02Instance;
   let sushi: SushiTokenInstance;
   let lp: UniswapV2PairInstance;
-  let addStrat: StrategyAllEthOnlyInstance;
+  let addStrat: StrategyAllETHOnlyInstance;
   let liqStrat: StrategyLiquidateInstance;
   let config: SimpleBankConfigInstance;
   let bank: BankInstance;
