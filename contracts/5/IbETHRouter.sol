@@ -1,12 +1,8 @@
 pragma solidity =0.5.16;
-
-import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "openzeppelin-solidity-2.3.0/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol";
-
-import "../weth/IWETH.sol";
-import "./UniswapV2Library.sol";
-import "./IUniswapV2Router02.sol";
+import "./uniswap/UniswapV2Library.sol";
+import "./Bank.sol";
 
 // helper methods for interacting with ERC20 tokens and sending ETH that do not consistently return true/false
 library TransferHelper {
@@ -62,27 +58,49 @@ library TransferHelper {
     }
 }
 
-contract UniswapV2Router02 is IUniswapV2Router02 {
+// IbETHRouter modifies UniswapV2Router02 to use AlphaHomora's ibETH, instead of WETH
+contract IbETHRouter {
     using SafeMath for uint256;
 
     address public factory;
-    address public WETH;
+    address payable ibETH; // usd ibETH, instead of WETH
 
     modifier ensure(uint256 deadline) {
-        require(deadline >= block.timestamp, "UniswapV2Router: EXPIRED");
+        require(deadline >= block.timestamp, "IbETHRouter: EXPIRED");
         _;
     }
-
-    constructor(address _factory, address _WETH) public {
+    
+    constructor(address _factory, address payable _ibETH) public {
         factory = _factory;
-        WETH = _WETH;
+        ibETH = _ibETH;
     }
 
     function() external payable {
-        assert(msg.sender == WETH); // only accept ETH via fallback from the WETH contract
+        assert(msg.sender == ibETH); // only accept ETH via fallback from the Bank contract
     }
 
-    // **** ADD LIQUIDITY ****
+    // **** ETH-ibETH FUNCTIONS ****
+    // Get number of ibETH received for the amouthETH send to Bank
+    function ETHToIbETH(uint256 amountETH) public view returns (uint256) {
+        uint256 totalETH = Bank(ibETH).totalETH();        
+        return totalETH == 0 ? amountETH : amountETH.mul(Bank(ibETH).totalSupply()).div(totalETH); 
+    } 
+
+    // Get exact number of ETH needed to deposit to get amountIbETH from the Bank
+    // Note: Round up the amount of ETH needed, to be used with Bank.deposit
+    function IbETHToExactETH(uint256 amountIbETH) public view returns (uint256) {
+        uint256 totalSupply = Bank(ibETH).totalSupply();         
+        return totalSupply == 0? amountIbETH : amountIbETH.mul(Bank(ibETH).totalETH()).add(totalSupply).sub(1).div(totalSupply);                   
+    } 
+
+    // Get exact number of ETH received when withdraw amountIbETH from the Bank    
+    // Note: Round down the amount of ETH received, to be used with Bank.withdraw
+    function ExactIbETHToETH(uint256 amountIbETH) public view returns (uint256) {
+        uint256 totalSupply = Bank(ibETH).totalSupply();         
+        return totalSupply == 0? amountIbETH : amountIbETH.mul(Bank(ibETH).totalETH()).div(totalSupply);                   
+    } 
+
+    // **** ADD LIQUIDITY **** (UNCHANGED)
     function _addLiquidity(
         address tokenA,
         address tokenB,
@@ -111,7 +129,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             if (amountBOptimal <= amountBDesired) {
                 require(
                     amountBOptimal >= amountBMin,
-                    "UniswapV2Router: INSUFFICIENT_B_AMOUNT"
+                    "IbETHRouter: INSUFFICIENT_B_AMOUNT"
                 );
                 (amountA, amountB) = (amountADesired, amountBOptimal);
             } else {
@@ -123,13 +141,14 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
                 assert(amountAOptimal <= amountADesired);
                 require(
                     amountAOptimal >= amountAMin,
-                    "UniswapV2Router: INSUFFICIENT_A_AMOUNT"
+                    "IbETHRouter: INSUFFICIENT_A_AMOUNT"
                 );
                 (amountA, amountB) = (amountAOptimal, amountBDesired);
             }
         }
     }
 
+    // (UNCHANGED)
     function addLiquidity(
         address tokenA,
         address tokenB,
@@ -162,11 +181,15 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         liquidity = IUniswapV2Pair(pair).mint(to);
     }
 
+    // Add ETH and Token to ibETH-Token pool.
+    // 1. Receive ETH and Token from caller
+    // 2. Wrap ETH to ibETH.
+    // 3. Add ETH and Token to the pool.
     function addLiquidityETH(
         address token,
         uint256 amountTokenDesired,
         uint256 amountTokenMin,
-        uint256 amountETHMin,
+        uint256 amountIbETHMin,
         address to,
         uint256 deadline
     )
@@ -175,29 +198,31 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         ensure(deadline)
         returns (
             uint256 amountToken,
-            uint256 amountETH,
+            uint256 amountIbETH,
             uint256 liquidity
         )
-    {
-        (amountToken, amountETH) = _addLiquidity(
+    {                        
+        (amountToken, amountIbETH) = _addLiquidity(
             token,
-            WETH,
+            ibETH,
             amountTokenDesired,
-            msg.value,
-            amountTokenMin,
-            amountETHMin
-        );
-        address pair = UniswapV2Library.pairFor(factory, token, WETH);
-        TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
-        IWETH(WETH).deposit.value(amountETH)();
-        assert(IWETH(WETH).transfer(pair, amountETH));
+            ETHToIbETH(msg.value),
+            amountTokenMin,            
+            amountIbETHMin
+        );        
+        address pair = UniswapV2Library.pairFor(factory, token, ibETH);        
+        TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);                        
+        uint256 amountETH = IbETHToExactETH(amountIbETH);        
+        Bank(ibETH).deposit.value(amountETH)();          
+        assert(Bank(ibETH).transfer(pair, amountIbETH));        
         liquidity = IUniswapV2Pair(pair).mint(to);
         // refund dust eth, if any
-        if (msg.value > amountETH)
+        if (msg.value > amountETH) {            
             TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
+        }            
     }
 
-    // **** REMOVE LIQUIDITY ****
+    // **** REMOVE LIQUIDITY **** (UNCHANGED)
     function removeLiquidity(
         address tokenA,
         address tokenB,
@@ -216,36 +241,41 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             : (amount1, amount0);
         require(
             amountA >= amountAMin,
-            "UniswapV2Router: INSUFFICIENT_A_AMOUNT"
+            "IbETHRouter: INSUFFICIENT_A_AMOUNT"
         );
         require(
             amountB >= amountBMin,
-            "UniswapV2Router: INSUFFICIENT_B_AMOUNT"
+            "IbETHRouter: INSUFFICIENT_B_AMOUNT"
         );
     }
-
+    
+    // Remove ETH and Token from ibETH-Token Pool.
+    // 1. Remove ibETH and Token from the pool.
+    // 2. Unwrap ibETH to ETH.
+    // 3. Return ETH and Token to caller.
     function removeLiquidityETH(
         address token,
         uint256 liquidity,
         uint256 amountTokenMin,
-        uint256 amountETHMin,
+        uint256 amountIbETHMin,
         address to,
         uint256 deadline
-    ) public ensure(deadline) returns (uint256 amountToken, uint256 amountETH) {
-        (amountToken, amountETH) = removeLiquidity(
+    ) public ensure(deadline) returns (uint256 amountToken, uint256 amountIbETH) {                
+        (amountToken, amountIbETH) = removeLiquidity(
             token,
-            WETH,
+            ibETH,
             liquidity,
             amountTokenMin,
-            amountETHMin,
+            amountIbETHMin,
             address(this),
             deadline
-        );
-        TransferHelper.safeTransfer(token, to, amountToken);
-        IWETH(WETH).withdraw(amountETH);
-        TransferHelper.safeTransferETH(to, amountETH);
+        );        
+        TransferHelper.safeTransfer(token, to, amountToken);                
+        Bank(ibETH).withdraw(amountIbETH);        
+        TransferHelper.safeTransferETH(to, ExactIbETHToETH(amountIbETH));
     }
 
+    // (UNCHANGED)
     function removeLiquidityWithPermit(
         address tokenA,
         address tokenB,
@@ -280,20 +310,21 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             deadline
         );
     }
-
+    
+    // Same as removeLiquidityETH, just with permit.
     function removeLiquidityETHWithPermit(
         address token,
         uint256 liquidity,
         uint256 amountTokenMin,
-        uint256 amountETHMin,
+        uint256 amountIbETHMin,
         address to,
         uint256 deadline,
         bool approveMax,
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external returns (uint256 amountToken, uint256 amountETH) {
-        address pair = UniswapV2Library.pairFor(factory, token, WETH);
+    ) external returns (uint256 amountToken, uint256 amountIbETH) {        
+        address pair = UniswapV2Library.pairFor(factory, token, ibETH);
         uint256 value = approveMax ? uint256(-1) : liquidity;
         IUniswapV2Pair(pair).permit(
             msg.sender,
@@ -304,56 +335,58 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             r,
             s
         );
-        (amountToken, amountETH) = removeLiquidityETH(
+        (amountToken, amountIbETH) = removeLiquidityETH(
             token,
             liquidity,
             amountTokenMin,
-            amountETHMin,
+            amountIbETHMin,
             to,
             deadline
         );
     }
 
     // **** REMOVE LIQUIDITY (supporting fee-on-transfer tokens) ****
+    // Remove ETH and Token from ibETH-Token Pool.    
     function removeLiquidityETHSupportingFeeOnTransferTokens(
         address token,
         uint256 liquidity,
         uint256 amountTokenMin,
-        uint256 amountETHMin,
+        uint256 amountIbETHMin,
         address to,
         uint256 deadline
-    ) public ensure(deadline) returns (uint256 amountETH) {
-        (, amountETH) = removeLiquidity(
+    ) public ensure(deadline) returns (uint256 amountIbETH) {
+        (, amountIbETH) = removeLiquidity(
             token,
-            WETH,
+            ibETH,
             liquidity,
             amountTokenMin,
-            amountETHMin,
+            amountIbETHMin,
             address(this),
             deadline
-        );
+        );        
         TransferHelper.safeTransfer(
             token,
             to,
             IERC20(token).balanceOf(address(this))
-        );
-        IWETH(WETH).withdraw(amountETH);
-        TransferHelper.safeTransferETH(to, amountETH);
+        );        
+        Bank(ibETH).withdraw(amountIbETH);
+        TransferHelper.safeTransferETH(to, ExactIbETHToETH(amountIbETH));
     }
-
+    
+    // Same as removeLiquidityETHSupportingFeeOnTransferTokens, just with permit.
     function removeLiquidityETHWithPermitSupportingFeeOnTransferTokens(
         address token,
         uint256 liquidity,
         uint256 amountTokenMin,
-        uint256 amountETHMin,
+        uint256 amountIbETHMin,
         address to,
         uint256 deadline,
         bool approveMax,
         uint8 v,
         bytes32 r,
         bytes32 s
-    ) external returns (uint256 amountETH) {
-        address pair = UniswapV2Library.pairFor(factory, token, WETH);
+    ) external returns (uint256 amountIbETH) {
+        address pair = UniswapV2Library.pairFor(factory, token, ibETH);
         uint256 value = approveMax ? uint256(-1) : liquidity;
         IUniswapV2Pair(pair).permit(
             msg.sender,
@@ -364,17 +397,17 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             r,
             s
         );
-        amountETH = removeLiquidityETHSupportingFeeOnTransferTokens(
+        amountIbETH = removeLiquidityETHSupportingFeeOnTransferTokens(
             token,
             liquidity,
             amountTokenMin,
-            amountETHMin,
+            amountIbETHMin,
             to,
             deadline
         );
     }
 
-    // **** SWAP ****
+    // **** SWAP **** (UNCHANGED)
     // requires the initial amount to have already been sent to the first pair
     function _swap(
         uint256[] memory amounts,
@@ -396,6 +429,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         }
     }
 
+    // (UNCHANGED)
     function swapExactTokensForTokens(
         uint256 amountIn,
         uint256 amountOutMin,
@@ -406,7 +440,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
         require(
             amounts[amounts.length - 1] >= amountOutMin,
-            "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "IbETHRouter: INSUFFICIENT_OUTPUT_AMOUNT"
         );
         TransferHelper.safeTransferFrom(
             path[0],
@@ -417,6 +451,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         _swap(amounts, path, to);
     }
 
+    // (UNCHANGED)
     function swapTokensForExactTokens(
         uint256 amountOut,
         uint256 amountInMax,
@@ -427,7 +462,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         amounts = UniswapV2Library.getAmountsIn(factory, amountOut, path);
         require(
             amounts[0] <= amountInMax,
-            "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
+            "IbETHRouter: EXCESSIVE_INPUT_AMOUNT"
         );
         TransferHelper.safeTransferFrom(
             path[0],
@@ -438,21 +473,25 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         _swap(amounts, path, to);
     }
 
+    // Swap exact amount of ETH for Token
+    // 1. Receive ETH from caller
+    // 2. Wrap ETH to ibETH.
+    // 3. Swap ibETH for Token    
     function swapExactETHForTokens(
         uint256 amountOutMin,
         address[] calldata path,
         address to,
         uint256 deadline
-    ) external payable ensure(deadline) returns (uint256[] memory amounts) {
-        require(path[0] == WETH, "UniswapV2Router: INVALID_PATH");
-        amounts = UniswapV2Library.getAmountsOut(factory, msg.value, path);
+    ) external payable ensure(deadline) returns (uint256[] memory amounts) {                
+        require(path[0] == ibETH, "IbETHRouter: INVALID_PATH");
+        amounts = UniswapV2Library.getAmountsOut(factory, ETHToIbETH(msg.value), path);        
         require(
             amounts[amounts.length - 1] >= amountOutMin,
-            "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
-        );
-        IWETH(WETH).deposit.value(amounts[0])();
+            "IbETHRouter: INSUFFICIENT_OUTPUT_AMOUNT"
+        );        
+        Bank(ibETH).deposit.value(msg.value)();        
         assert(
-            IWETH(WETH).transfer(
+            Bank(ibETH).transfer(
                 UniswapV2Library.pairFor(factory, path[0], path[1]),
                 amounts[0]
             )
@@ -460,6 +499,10 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         _swap(amounts, path, to);
     }
 
+    // Swap Token for exact amount of ETH
+    // 1. Receive Token from caller
+    // 2. Swap Token for ibETH.
+    // 3. Unwrap ibETH to ETH.
     function swapTokensForExactETH(
         uint256 amountOut,
         uint256 amountInMax,
@@ -467,11 +510,11 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         address to,
         uint256 deadline
     ) external ensure(deadline) returns (uint256[] memory amounts) {
-        require(path[path.length - 1] == WETH, "UniswapV2Router: INVALID_PATH");
-        amounts = UniswapV2Library.getAmountsIn(factory, amountOut, path);
+        require(path[path.length - 1] == ibETH, "IbETHRouter: INVALID_PATH");        
+        amounts = UniswapV2Library.getAmountsIn(factory, ETHToIbETH(amountOut), path);        
         require(
             amounts[0] <= amountInMax,
-            "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
+            "IbETHRouter: EXCESSIVE_INPUT_AMOUNT"
         );
         TransferHelper.safeTransferFrom(
             path[0],
@@ -479,11 +522,16 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             UniswapV2Library.pairFor(factory, path[0], path[1]),
             amounts[0]
         );
-        _swap(amounts, path, address(this));
-        IWETH(WETH).withdraw(amounts[amounts.length - 1]);
-        TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
+        _swap(amounts, path, address(this));  
+        uint256 amountIbETH = amounts[amounts.length - 1];      
+        Bank(ibETH).withdraw(amountIbETH);        
+        TransferHelper.safeTransferETH(to, ExactIbETHToETH(amountIbETH));
     }
 
+    // Swap exact amount of Token for ETH
+    // 1. Receive Token from caller
+    // 2. Swap Token for ibETH.
+    // 3. Unwrap ibETH to ETH.
     function swapExactTokensForETH(
         uint256 amountIn,
         uint256 amountOutMin,
@@ -491,12 +539,12 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         address to,
         uint256 deadline
     ) external ensure(deadline) returns (uint256[] memory amounts) {
-        require(path[path.length - 1] == WETH, "UniswapV2Router: INVALID_PATH");
+        require(path[path.length - 1] == ibETH, "IbETHRouter: INVALID_PATH");
         amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
         require(
             amounts[amounts.length - 1] >= amountOutMin,
-            "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
-        );
+            "IbETHRouter: INSUFFICIENT_OUTPUT_AMOUNT"
+        );        
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
@@ -504,25 +552,31 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             amounts[0]
         );
         _swap(amounts, path, address(this));
-        IWETH(WETH).withdraw(amounts[amounts.length - 1]);
-        TransferHelper.safeTransferETH(to, amounts[amounts.length - 1]);
+        uint256 amountIbETH = amounts[amounts.length - 1];        
+        Bank(ibETH).withdraw(amountIbETH);        
+        TransferHelper.safeTransferETH(to, ExactIbETHToETH(amountIbETH));
     }
 
+    // Swap ETH for exact amount of Token
+    // 1. Receive ETH from caller
+    // 2. Wrap ETH to ibETH.
+    // 3. Swap ibETH for Token    
     function swapETHForExactTokens(
         uint256 amountOut,
         address[] calldata path,
         address to,
         uint256 deadline
     ) external payable ensure(deadline) returns (uint256[] memory amounts) {
-        require(path[0] == WETH, "UniswapV2Router: INVALID_PATH");
+        require(path[0] == ibETH, "IbETHRouter: INVALID_PATH");
         amounts = UniswapV2Library.getAmountsIn(factory, amountOut, path);
         require(
             amounts[0] <= msg.value,
-            "UniswapV2Router: EXCESSIVE_INPUT_AMOUNT"
-        );
-        IWETH(WETH).deposit.value(amounts[0])();
+            "IbETHRouter: EXCESSIVE_INPUT_AMOUNT"
+        );                
+        uint256 amountETH = IbETHToExactETH(amounts[0]);         
+        Bank(ibETH).deposit.value(amountETH)();            
         assert(
-            IWETH(WETH).transfer(
+            Bank(ibETH).transfer(
                 UniswapV2Library.pairFor(factory, path[0], path[1]),
                 amounts[0]
             )
@@ -530,10 +584,10 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         _swap(amounts, path, to);
         // refund dust eth, if any
         if (msg.value > amounts[0])
-            TransferHelper.safeTransferETH(msg.sender, msg.value - amounts[0]);
+            TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
     }
 
-    // **** SWAP (supporting fee-on-transfer tokens) ****
+    // **** SWAP (supporting fee-on-transfer tokens) **** (UNCHANGED)
     // requires the initial amount to have already been sent to the first pair
     function _swapSupportingFeeOnTransferTokens(
         address[] memory path,
@@ -572,6 +626,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         }
     }
 
+    // (UNCHANGED)
     function swapExactTokensForTokensSupportingFeeOnTransferTokens(
         uint256 amountIn,
         uint256 amountOutMin,
@@ -590,34 +645,36 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         require(
             IERC20(path[path.length - 1]).balanceOf(to).sub(balanceBefore) >=
                 amountOutMin,
-            "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "IbETHRouter: INSUFFICIENT_OUTPUT_AMOUNT"
         );
     }
 
+    // Same as swapExactETHForTokens, just with supporting fee on transfer.
     function swapExactETHForTokensSupportingFeeOnTransferTokens(
         uint256 amountOutMin,
         address[] calldata path,
         address to,
         uint256 deadline
     ) external payable ensure(deadline) {
-        require(path[0] == WETH, "UniswapV2Router: INVALID_PATH");
-        uint256 amountIn = msg.value;
-        IWETH(WETH).deposit.value(amountIn)();
+        require(path[0] == ibETH, "IbETHRouter: INVALID_PATH");
+        uint256 amountIn = msg.value;                
+        Bank(ibETH).deposit.value(amountIn)();        
         assert(
-            IWETH(WETH).transfer(
+            Bank(ibETH).transfer(
                 UniswapV2Library.pairFor(factory, path[0], path[1]),
-                amountIn
+                ETHToIbETH(amountIn)
             )
         );
         uint256 balanceBefore = IERC20(path[path.length - 1]).balanceOf(to);
-        _swapSupportingFeeOnTransferTokens(path, to);
+        _swapSupportingFeeOnTransferTokens(path, to);        
         require(
             IERC20(path[path.length - 1]).balanceOf(to).sub(balanceBefore) >=
                 amountOutMin,
-            "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
+            "IbETHRouter: INSUFFICIENT_OUTPUT_AMOUNT"
         );
     }
 
+    // Same as swapExactTokensForETH, just with supporting fee on transfer.
     function swapExactTokensForETHSupportingFeeOnTransferTokens(
         uint256 amountIn,
         uint256 amountOutMin,
@@ -625,7 +682,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         address to,
         uint256 deadline
     ) external ensure(deadline) {
-        require(path[path.length - 1] == WETH, "UniswapV2Router: INVALID_PATH");
+        require(path[path.length - 1] == ibETH, "IbETHRouter: INVALID_PATH");
         TransferHelper.safeTransferFrom(
             path[0],
             msg.sender,
@@ -633,16 +690,16 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
             amountIn
         );
         _swapSupportingFeeOnTransferTokens(path, address(this));
-        uint256 amountOut = IERC20(WETH).balanceOf(address(this));
+        uint256 amountOut = Bank(ibETH).balanceOf(address(this));
         require(
             amountOut >= amountOutMin,
-            "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"
-        );
-        IWETH(WETH).withdraw(amountOut);
-        TransferHelper.safeTransferETH(to, amountOut);
-    }
+            "IbETHRouter: INSUFFICIENT_OUTPUT_AMOUNT"
+        );                
+        Bank(ibETH).withdraw(amountOut);        
+        TransferHelper.safeTransferETH(to, ExactIbETHToETH(amountOut));        
+    }    
 
-    // **** LIBRARY FUNCTIONS ****
+    // **** LIBRARY FUNCTIONS **** (UNCHANGED)
     function quote(
         uint256 amountA,
         uint256 reserveA,
