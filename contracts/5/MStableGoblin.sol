@@ -2,7 +2,6 @@ pragma solidity 0.5.16;
 import "openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol";
 import "openzeppelin-solidity-2.3.0/contracts/utils/ReentrancyGuard.sol";
-// import "synthetix/contracts/interfaces/IStakingRewards.sol";
 import "./mstable/IMStableStakingRewards.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
@@ -12,6 +11,8 @@ import "./Strategy.sol";
 import "./SafeToken.sol";
 import "./Goblin.sol";
 
+// MStableGoblin is specific for MTA-ETH pool in Uniswap.
+// In this case, fToken and reward token, namely MTA, are the same.
 contract MStableGoblin is Ownable, ReentrancyGuard, Goblin {
     /// @notice Libraries
     using SafeToken for address;
