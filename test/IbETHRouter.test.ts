@@ -9,7 +9,7 @@ import {
   IbETHRouterInstance,
 } from '../typechain';
 
-const { BN, ether } = require('@openzeppelin/test-helpers');
+const { BN, ether, expectRevert } = require('@openzeppelin/test-helpers');
 
 const UniswapV2Factory = artifacts.require('UniswapV2Factory');
 const UniswapV2Router02 = artifacts.require('UniswapV2Router02');
@@ -89,11 +89,42 @@ contract('IbETHRouter', ([deployer, alice]) => {
 
   it('should be able to add liquidity to ibETH-MOCK with ETH and MOCK', async () => {
     await token.approve(ibETHRouter.address, ether('100'), { from: alice });
-    await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
+    const x = await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
       from: alice,
       value: ether('1'),
     });
+    console.log(x);
     expect(await lp.balanceOf(alice)).to.be.bignumber.above(ether('0'));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should revert when add liquidity to ibETH-MOCK with too little ETH', async () => {
+    await token.approve(ibETHRouter.address, ether('100'), { from: alice });
+    expectRevert(
+      ibETHRouter.addLiquidityETH(ether('100'), 0, ether('50'), alice, FOREVER, {
+        from: alice,
+        value: ether('1'),
+      }),
+      'IbETHRouter: require more ETH than amountETHmin'
+    );
+    expect(await lp.balanceOf(alice)).to.be.bignumber.equal(ether('0'));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should revert when add liquidity to ibETH-MOCK with too little MOCK', async () => {
+    await token.approve(ibETHRouter.address, ether('100'), { from: alice });
+    expectRevert(
+      ibETHRouter.addLiquidityETH(ether('100'), ether('1000'), 0, alice, FOREVER, {
+        from: alice,
+        value: ether('1'),
+      }),
+      'UniswapV2Router: INSUFFICIENT_A_AMOUNT'
+    );
+    expect(await lp.balanceOf(alice)).to.be.bignumber.equal(ether('0'));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
   it('should be able to add liquidity with excess ETH and get dust ETH back', async () => {
@@ -108,6 +139,8 @@ contract('IbETHRouter', ([deployer, alice]) => {
     });
     expect(await lp.balanceOf(alice)).to.be.bignumber.above(ether('0'));
     assertAlmostEqual(new BN(await web3.eth.getBalance(alice)), aliceBalanceBefore.sub(ether('1.045454545454545454')));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
   it('should be able to add liquidity with excess MOCK and has some leftover', async () => {
@@ -122,6 +155,8 @@ contract('IbETHRouter', ([deployer, alice]) => {
     });
     expect(await lp.balanceOf(alice)).to.be.bignumber.above(ether('0'));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceBalanceBefore.sub(ether('9.5652173913043478')));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
   it('should be able to remove liquidity and get ETH and MOCK back', async () => {
@@ -144,9 +179,55 @@ contract('IbETHRouter', ([deployer, alice]) => {
     expect(await lp.balanceOf(alice)).to.be.bignumber.equal(ether('0'));
     assertAlmostEqual(await token.balanceOf(alice), aliceTokenBalanceBefore.add(ether('95.65217391304347800')));
     assertAlmostEqual(new BN(await web3.eth.getBalance(alice)), aliceETHBalanceBefore.add(ether('1')));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
-  it('should be able to remove liquidity and get all MOCK back', async () => {
+  it('should revert when remove liquidity and receive too little ETH', async () => {
+    await token.approve(ibETHRouter.address, ether('100'), { from: alice });
+    await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
+      from: alice,
+      value: ether('1'),
+    });
+    const aliceLPBalanceBefore = await lp.balanceOf(alice);
+    expect(aliceLPBalanceBefore).to.be.bignumber.above(ether('0'));
+    // Deposit 1 ETH, yield 0.95652173913043478 ibETH
+    // Add liquidity with 0.95652173913043478 ibETH and 95.65217391304347800 MOCK
+    // So, removeLiquidity should get 1 ETH and 95.65217391304347800 MOCK back
+    await lp.approve(ibETHRouter.address, aliceLPBalanceBefore, { from: alice });
+    expectRevert(
+      ibETHRouter.removeLiquidityETH(aliceLPBalanceBefore, 0, ether('100'), alice, FOREVER, {
+        from: alice,
+      }),
+      'IbETHRouter: receive less ETH than amountETHmin'
+    );
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should revert when remove liquidity and receive too little MOCK', async () => {
+    await token.approve(ibETHRouter.address, ether('100'), { from: alice });
+    await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
+      from: alice,
+      value: ether('1'),
+    });
+    const aliceLPBalanceBefore = await lp.balanceOf(alice);
+    expect(aliceLPBalanceBefore).to.be.bignumber.above(ether('0'));
+    // Deposit 1 ETH, yield 0.95652173913043478 ibETH
+    // Add liquidity with 0.95652173913043478 ibETH and 95.65217391304347800 MOCK
+    // So, removeLiquidity should get 1 ETH and 95.65217391304347800 MOCK back
+    await lp.approve(ibETHRouter.address, aliceLPBalanceBefore, { from: alice });
+    expectRevert(
+      ibETHRouter.removeLiquidityETH(aliceLPBalanceBefore, ether('1000'), 0, alice, FOREVER, {
+        from: alice,
+      }),
+      'UniswapV2Router: INSUFFICIENT_A_AMOUNT'
+    );
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should be able to remove liquidity (all MOCK) and get only MOCK back', async () => {
     await token.approve(ibETHRouter.address, ether('100'), { from: alice });
     await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
       from: alice,
@@ -160,12 +241,36 @@ contract('IbETHRouter', ([deployer, alice]) => {
     // Add liquidity with 0.95652173913043478 ibETH and 95.65217391304347800 MOCK
     // So, removeLiquidityAllAlpha should get slightly less than 2*95.65217391304347800 = 191.304348 MOCK (190.116529919717225111)back
     await lp.approve(ibETHRouter.address, aliceLPBalanceBefore, { from: alice });
-    await ibETHRouter.removeLiquidityAllAlpha(aliceLPBalanceBefore, 0, 0, alice, FOREVER, {
+    await ibETHRouter.removeLiquidityAllAlpha(aliceLPBalanceBefore, 0, alice, FOREVER, {
       from: alice,
     });
     expect(await lp.balanceOf(alice)).to.be.bignumber.equal(ether('0'));
     assertAlmostEqual(await token.balanceOf(alice), aliceTokenBalanceBefore.add(ether('190.116529919717225111')));
     assertAlmostEqual(new BN(await web3.eth.getBalance(alice)), aliceETHBalanceBefore);
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should revert when remove liquidity (all MOCK) and receive too little MOCK', async () => {
+    await token.approve(ibETHRouter.address, ether('100'), { from: alice });
+    await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
+      from: alice,
+      value: ether('1'),
+    });
+    const aliceLPBalanceBefore = await lp.balanceOf(alice);
+    expect(aliceLPBalanceBefore).to.be.bignumber.above(ether('0'));
+    // Deposit 1 ETH, yield 0.95652173913043478 ibETH
+    // Add liquidity with 0.95652173913043478 ibETH and 95.65217391304347800 MOCK
+    // So, removeLiquidityAllAlpha should get slightly less than 2*95.65217391304347800 = 191.304348 MOCK (190.116529919717225111)back
+    await lp.approve(ibETHRouter.address, aliceLPBalanceBefore, { from: alice });
+    expectRevert(
+      ibETHRouter.removeLiquidityAllAlpha(aliceLPBalanceBefore, ether('1000'), alice, FOREVER, {
+        from: alice,
+      }),
+      'IbETHRouter: receive less Alpha than amountAlphaMin'
+    );
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
   it('should be able to swap exact ETH for MOCK', async () => {
@@ -179,6 +284,20 @@ contract('IbETHRouter', ([deployer, alice]) => {
     });
     assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.sub(ether('1')));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceBalanceBefore.add(ether('94.464356006673746911')));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should revert when swap exact ETH for MOCK and receive too little MOCK', async () => {
+    expectRevert(
+      ibETHRouter.swapExactETHForAlpha(ether('1000'), alice, FOREVER, {
+        from: alice,
+        value: ether('1'),
+      }),
+      'UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT'
+    );
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
   it('should be able to swap MOCK for exact ETH', async () => {
@@ -194,6 +313,22 @@ contract('IbETHRouter', ([deployer, alice]) => {
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(
       aliceTokenBalanceBefore.sub(ether('87.095775529377361063'))
     );
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should revert when swap MOCK for exact ETH given too little MOCK', async () => {
+    await token.approve(ibETHRouter.address, ether('100'), { from: alice });
+    // 0.9 ETH, yield 0.860869565 ibETH
+    // so should use slightly more than 86.08 MOCK (87.095775529377361063)
+    expectRevert(
+      ibETHRouter.swapAlphaForExactETH(ether('0.9'), ether('1'), alice, FOREVER, {
+        from: alice,
+      }),
+      'UniswapV2Router: EXCESSIVE_INPUT_AMOUNT'
+    );
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
   it('should be able to swap exact MOCK for ETH', async () => {
@@ -207,6 +342,22 @@ contract('IbETHRouter', ([deployer, alice]) => {
     });
     assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.add(ether('1.032028854142382266')));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceTokenBalanceBefore.sub(ether('100')));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should revert when swap exact MOCK for ETH and receive too little ETH', async () => {
+    await token.approve(ibETHRouter.address, ether('100'), { from: alice });
+    // 100 MOCK, yield 1 ibETH
+    // so should get slightly less than 1.045 MOCK (1.032028854142382266)
+    expectRevert(
+      ibETHRouter.swapExactAlphaForETH(ether('100'), ether('1000'), alice, FOREVER, {
+        from: alice,
+      }),
+      'IbETHRouter: receive less ETH than amountETHmin'
+    );
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
   it('should be able to swap ETH for exact MOCK', async () => {
@@ -221,5 +372,19 @@ contract('IbETHRouter', ([deployer, alice]) => {
     });
     assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.sub(ether('1.059192269185886403')));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceTokenBalanceBefore.add(ether('100')));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should revert when swap ETH for exact MOCK given too little ETH', async () => {
+    expectRevert(
+      ibETHRouter.swapETHForExactAlpha(ether('100'), alice, FOREVER, {
+        from: alice,
+        value: ether('0.1'),
+      }),
+      'UniswapV2Router: EXCESSIVE_INPUT_AMOUNT'
+    );
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 });

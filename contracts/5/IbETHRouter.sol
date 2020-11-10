@@ -89,20 +89,6 @@ contract IbETHRouter is Ownable {
         return totalETH == 0 ? amountETH : amountETH.mul(IBank(ibETH).totalSupply()).div(totalETH); 
     } 
 
-    // Get number of ETH needed to deposit to get exact amountIbETH from the Bank
-    // Note: Round up the amount of ETH needed, to be used with Bank.deposit
-    function ethForExactIbETH(uint256 amountIbETH) public view returns (uint256) {
-        uint256 totalSupply = IBank(ibETH).totalSupply();         
-        return totalSupply == 0? amountIbETH : amountIbETH.mul(IBank(ibETH).totalETH()).add(totalSupply).sub(1).div(totalSupply);                   
-    } 
-
-    // Get number of ETH received when withdraw exact amountIbETH from the Bank    
-    // Note: Round down the amount of ETH received, to be used with Bank.withdraw
-    function exactIbETHToETH(uint256 amountIbETH) public view returns (uint256) {
-        uint256 totalSupply = IBank(ibETH).totalSupply();         
-        return totalSupply == 0? amountIbETH : amountIbETH.mul(IBank(ibETH).totalETH()).div(totalSupply);                   
-    } 
-
     // Add ETH and Alpha from ibETH-Alpha Pool.
     // 1. Receive ETH and Alpha from caller.
     // 2. Wrap ETH to ibETH.
@@ -123,7 +109,7 @@ contract IbETHRouter is Ownable {
         ) {                
         TransferHelper.safeTransferFrom(alpha, msg.sender, address(this), amountAlphaDesired);
         IBank(ibETH).deposit.value(msg.value)();   
-        uint256 amountIbETHDesired = exactETHToIbETH(msg.value);                         
+        uint256 amountIbETHDesired = IBank(ibETH).balanceOf(address(this)); 
         uint256 amountIbETH;
         (amountAlpha, amountIbETH, liquidity) = IUniswapV2Router02(router).addLiquidity(
             alpha,
@@ -131,19 +117,19 @@ contract IbETHRouter is Ownable {
             amountAlphaDesired,            
             amountIbETHDesired,
             amountAlphaMin,            
-            exactETHToIbETH(amountETHMin),
+            0,
             to,
             deadline
         );         
         if (amountAlphaDesired > amountAlpha) {
             TransferHelper.safeTransfer(alpha, msg.sender, amountAlphaDesired.sub(amountAlpha));
-        }            
-        if (amountIbETHDesired > amountIbETH) {
-            uint256 ibETHLeftOver = amountIbETHDesired.sub(amountIbETH);
-            IBank(ibETH).withdraw(ibETHLeftOver);        
-            TransferHelper.safeTransferETH(msg.sender, exactIbETHToETH(ibETHLeftOver));
-        }          
-        amountETH = exactIbETHToETH(amountIbETH);
+        }                       
+        IBank(ibETH).withdraw(amountIbETHDesired.sub(amountIbETH));        
+        amountETH = msg.value - address(this).balance;
+        if (amountETH > 0) {
+            TransferHelper.safeTransferETH(msg.sender, address(this).balance);
+        }
+        require(amountETH >= amountETHMin, "IbETHRouter: require more ETH than amountETHmin");
     }
       
     // Remove ETH and Alpha from ibETH-Alpha Pool.
@@ -164,14 +150,17 @@ contract IbETHRouter is Ownable {
             ibETH,
             liquidity,
             amountAlphaMin,
-            exactETHToIbETH(amountETHMin),
+            0,
             address(this),
             deadline
         );                        
-        TransferHelper.safeTransfer(alpha, to, amountAlpha);                
+        TransferHelper.safeTransfer(alpha, to, amountAlpha); 
         IBank(ibETH).withdraw(amountIbETH);        
-        TransferHelper.safeTransferETH(to, exactIbETHToETH(amountIbETH));
-        amountETH = exactIbETHToETH(amountIbETH);     
+        amountETH = address(this).balance;
+        if (amountETH > 0) {
+            TransferHelper.safeTransferETH(msg.sender, address(this).balance);
+        }
+        require(amountETH >= amountETHMin, "IbETHRouter: receive less ETH than amountETHmin");                               
     }
 
     // Remove liquidity from ibETH-Alpha Pool and convert all ibETH to Alpha 
@@ -180,8 +169,7 @@ contract IbETHRouter is Ownable {
     // 3. Return Alpha to caller.   
     function removeLiquidityAllAlpha(        
         uint256 liquidity,
-        uint256 amountAlphaMin,
-        uint256 amountETHMin,
+        uint256 amountAlphaMin,        
         address to,
         uint256 deadline
     ) public returns (uint256 amountAlpha) {                  
@@ -190,8 +178,8 @@ contract IbETHRouter is Ownable {
             alpha,
             ibETH,
             liquidity,
-            amountAlphaMin,
-            exactETHToIbETH(amountETHMin),
+            0,
+            0,
             address(this),
             deadline
         );        
@@ -201,6 +189,7 @@ contract IbETHRouter is Ownable {
         uint256[] memory amounts = IUniswapV2Router02(router).swapExactTokensForTokens(removeAmountIbETH, 0, path, to, deadline);               
         TransferHelper.safeTransfer(alpha, to, removeAmountAlpha);                        
         amountAlpha = removeAmountAlpha.add(amounts[1]);
+        require(amountAlpha >= amountAlphaMin, "IbETHRouter: receive less Alpha than amountAlphaMin");                               
     }       
 
     // Swap exact amount of ETH for Token
@@ -216,9 +205,9 @@ contract IbETHRouter is Ownable {
         address[] memory path = new address[](2);
         path[0] = ibETH;
         path[1] = alpha;     
-        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapExactTokensForTokens(exactETHToIbETH(msg.value), amountAlphaOutMin, path, to, deadline);
-        amounts = new uint256[](2);
-        amounts[0] = exactIbETHToETH(swapAmounts[0]);
+        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapExactTokensForTokens(IBank(ibETH).balanceOf(address(this)), amountAlphaOutMin, path, to, deadline);
+        amounts = new uint256[](2);        
+        amounts[0] = msg.value;
         amounts[1] = swapAmounts[1];
     }
 
@@ -236,15 +225,15 @@ contract IbETHRouter is Ownable {
         address[] memory path = new address[](2);
         path[0] = alpha;
         path[1] = ibETH;
-        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(exactETHToIbETH(amountETHOut), amountAlphaInMax, path, address(this), deadline);                   
-        IBank(ibETH).withdraw(swapAmounts[1]);        
-        TransferHelper.safeTransferETH(to, exactIbETHToETH(swapAmounts[1]));        
-        if (amountAlphaInMax > swapAmounts[0]) {
-            TransferHelper.safeTransfer(alpha, msg.sender, amountAlphaInMax.sub(swapAmounts[0]));
-        }            
+        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(exactETHToIbETH(amountETHOut), amountAlphaInMax, path, address(this), deadline);                           
+        IBank(ibETH).withdraw(swapAmounts[1]);
         amounts = new uint256[](2);
         amounts[0] = swapAmounts[0];
-        amounts[1] = exactIbETHToETH(swapAmounts[1]);
+        amounts[1] = address(this).balance;
+        TransferHelper.safeTransferETH(to, address(this).balance);        
+        if (amountAlphaInMax > amounts[0]) {
+            TransferHelper.safeTransfer(alpha, msg.sender, amountAlphaInMax.sub(amounts[0]));
+        }                    
     }
 
     // Swap exact amount of Token for ETH
@@ -261,12 +250,13 @@ contract IbETHRouter is Ownable {
         address[] memory path = new address[](2);
         path[0] = alpha;
         path[1] = ibETH;
-        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapExactTokensForTokens(amountAlphaIn, exactETHToIbETH(amountETHOutMin), path, address(this), deadline);                
+        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapExactTokensForTokens(amountAlphaIn, 0, path, address(this), deadline);                        
         IBank(ibETH).withdraw(swapAmounts[1]);        
-        TransferHelper.safeTransferETH(to, exactIbETHToETH(swapAmounts[1]));
         amounts = new uint256[](2);
         amounts[0] = swapAmounts[0];
-        amounts[1] = exactIbETHToETH(swapAmounts[1]);
+        amounts[1] = address(this).balance;
+        TransferHelper.safeTransferETH(to, amounts[1]);
+        require(amounts[1] >= amountETHOutMin, "IbETHRouter: receive less ETH than amountETHmin");                                       
     }
 
     // Swap ETH for exact amount of Token
@@ -279,19 +269,19 @@ contract IbETHRouter is Ownable {
         uint256 deadline
     ) external payable returns (uint256[] memory amounts) {             
         IBank(ibETH).deposit.value(msg.value)();              
-        uint256 amountIbETHInMax = exactETHToIbETH(msg.value);        
+        uint256 amountIbETHInMax = IBank(ibETH).balanceOf(address(this));
         address[] memory path = new address[](2);
         path[0] = ibETH;
         path[1] = alpha;
-        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(amountAlphaOut, amountIbETHInMax, path, to, deadline);        
-        if (amountIbETHInMax > swapAmounts[1]) {
-            uint256 ibETHLeftOver = amountIbETHInMax.sub(swapAmounts[1]);
-            IBank(ibETH).withdraw(ibETHLeftOver);        
-            TransferHelper.safeTransferETH(to, exactIbETHToETH(ibETHLeftOver));
-        }
-        amounts = new uint256[](2);
-        amounts[0] = exactIbETHToETH(swapAmounts[0]);
-        amounts[1] = swapAmounts[1];              
+        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(amountAlphaOut, amountIbETHInMax, path, to, deadline);                
+        // Transefer left over ETH back
+        if (amountIbETHInMax > swapAmounts[1]) {            
+            IBank(ibETH).withdraw(amountIbETHInMax.sub(swapAmounts[1]));        
+            amounts = new uint256[](2);
+            amounts[0] = address(this).balance;
+            amounts[1] = swapAmounts[1];              
+            TransferHelper.safeTransferETH(to, amounts[0]);
+        }        
     }   
 
     /// @dev Recover ERC20 tokens that were accidentally sent to this smart contract.
