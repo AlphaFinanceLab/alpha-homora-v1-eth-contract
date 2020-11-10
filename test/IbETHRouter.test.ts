@@ -87,7 +87,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     expect(new BN(await web3.eth.getBalance(alice))).to.be.bignumber.above(DEFAULT_ETH_BALANCE);
   });
 
-  it('should be able to add liquidity to ibETH-MOCK with ETH and MOCK 1', async () => {
+  it('should be able to add liquidity to ibETH-MOCK with ETH and MOCK', async () => {
     await token.approve(ibETHRouter.address, ether('100'), { from: alice });
     await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
       from: alice,

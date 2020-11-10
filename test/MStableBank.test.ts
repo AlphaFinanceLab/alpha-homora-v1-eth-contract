@@ -1,15 +1,15 @@
 import {
-  MockErc20Instance,
+  MockERC20Instance,
   UniswapV2FactoryInstance,
   UniswapV2Router02Instance,
   UniswapV2PairInstance,
-  StrategyAllEthOnlyInstance,
+  StrategyAllETHOnlyInstance,
   StrategyLiquidateInstance,
   BankInstance,
   SimpleBankConfigInstance,
-  MstableGoblinInstance,
+  MStableGoblinInstance,
   MStableStakingRewardsInstance,
-  WethInstance,
+  WETHInstance,
 } from '../typechain';
 
 const UniswapV2Factory = artifacts.require('UniswapV2Factory');
@@ -52,16 +52,16 @@ contract('MStableBank', ([deployer, alice, bob, eve]) => {
   const KILL_FACTOR = new BN('8000');
 
   let factory: UniswapV2FactoryInstance;
-  let weth: WethInstance;
+  let weth: WETHInstance;
   let router: UniswapV2Router02Instance;
-  let mta: MockErc20Instance;
+  let mta: MockERC20Instance;
   let lp: UniswapV2PairInstance;
-  let addStrat: StrategyAllEthOnlyInstance;
+  let addStrat: StrategyAllETHOnlyInstance;
   let liqStrat: StrategyLiquidateInstance;
   let config: SimpleBankConfigInstance;
   let bank: BankInstance;
   let staking: MStableStakingRewardsInstance;
-  let goblin: MstableGoblinInstance;
+  let goblin: MStableGoblinInstance;
 
   beforeEach(async () => {
     factory = await UniswapV2Factory.new(deployer);

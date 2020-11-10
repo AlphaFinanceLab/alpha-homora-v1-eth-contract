@@ -993,16 +993,16 @@ contract MStableStakingRewards is StakingTokenWrapper, RewardsDistributionRecipi
         _stake(msg.sender, _amount);
     }
 
-    /**
-     * @dev Stakes a given amount of the StakingToken for a given beneficiary
-     * @param _beneficiary Staked tokens are credited to this address
-     * @param _amount      Units of StakingToken
-     */
-    function stake(address _beneficiary, uint256 _amount)
-        external
-    {
-        _stake(_beneficiary, _amount);
-    }
+    // /**
+    //  * @dev Stakes a given amount of the StakingToken for a given beneficiary
+    //  * @param _beneficiary Staked tokens are credited to this address
+    //  * @param _amount      Units of StakingToken
+    //  */
+    // function stake(address _beneficiary, uint256 _amount)
+    //     external
+    // {
+    //     _stake(_beneficiary, _amount);
+    // }
 
     /**
      * @dev Internally stakes an amount by depositing from sender,
