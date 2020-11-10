@@ -3,6 +3,7 @@
     "compile5": "buidler typechain --config buidler.config.js",
     "compile6": "buidler typechain --config buidler.config.6.js",
     "compile": "buidler typechain --config buidler.config.js && buidler typechain --config buidler.config.6.js",
+    "test:mstable": "buidler test ./test/MStableBank.test.ts",
     "test:sushi": "buidler test ./test/SushiswapBank.test.ts",
     "test:sushi12": "buidler test ./test/SushiswapPool12Bank.test.ts",
     "test:uni": "buidler test ./test/UniswapBank.test.js",
