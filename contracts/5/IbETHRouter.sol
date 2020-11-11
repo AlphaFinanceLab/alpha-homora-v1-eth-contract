@@ -83,12 +83,12 @@ contract IbETHRouter is Ownable {
     }
 
     // **** ETH-ibETH FUNCTIONS ****
-    // Get number of ibETH received for the amouthETH send to Bank
-    function exactETHToIbETH(uint256 amountETH) public view returns (uint256) {
+    // Get number of ibETH needed to deposit to get exact amountIbETH from the Bank
+    function ibETHForExactETH(uint256 amountETH) public view returns (uint256) {
         uint256 totalETH = IBank(ibETH).totalETH();        
-        return totalETH == 0 ? amountETH : amountETH.mul(IBank(ibETH).totalSupply()).div(totalETH); 
+        return totalETH == 0 ? amountETH : amountETH.mul(IBank(ibETH).totalSupply()).add(totalETH).sub(1).div(totalETH); 
     } 
-
+    
     // Add ETH and Alpha from ibETH-Alpha Pool.
     // 1. Receive ETH and Alpha from caller.
     // 2. Wrap ETH to ibETH.
@@ -225,7 +225,7 @@ contract IbETHRouter is Ownable {
         address[] memory path = new address[](2);
         path[0] = alpha;
         path[1] = ibETH;
-        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(exactETHToIbETH(amountETHOut), amountAlphaInMax, path, address(this), deadline);                           
+        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(ibETHForExactETH(amountETHOut), amountAlphaInMax, path, address(this), deadline);                           
         IBank(ibETH).withdraw(swapAmounts[1]);
         amounts = new uint256[](2);
         amounts[0] = swapAmounts[0];
@@ -269,14 +269,14 @@ contract IbETHRouter is Ownable {
         uint256 deadline
     ) external payable returns (uint256[] memory amounts) {             
         IBank(ibETH).deposit.value(msg.value)();              
-        uint256 amountIbETHInMax = IBank(ibETH).balanceOf(address(this));
+        uint256 amountIbETHInMax = IBank(ibETH).balanceOf(address(this));        
         address[] memory path = new address[](2);
         path[0] = ibETH;
         path[1] = alpha;
-        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(amountAlphaOut, amountIbETHInMax, path, to, deadline);                
-        // Transefer left over ETH back
-        if (amountIbETHInMax > swapAmounts[1]) {            
-            IBank(ibETH).withdraw(amountIbETHInMax.sub(swapAmounts[1]));        
+        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(amountAlphaOut, amountIbETHInMax, path, to, deadline);                                        
+        // Transfer left over ETH back
+        if (amountIbETHInMax > swapAmounts[0]) {             
+            IBank(ibETH).withdraw(amountIbETHInMax.sub(swapAmounts[0]));        
             amounts = new uint256[](2);
             amounts[0] = address(this).balance;
             amounts[1] = swapAmounts[1];              

@@ -89,13 +89,13 @@ contract('IbETHRouter', ([deployer, alice]) => {
 
   it('should be able to add liquidity to ibETH-MOCK with ETH and MOCK', async () => {
     await token.approve(ibETHRouter.address, ether('100'), { from: alice });
-    const x = await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
+    await ibETHRouter.addLiquidityETH(ether('100'), 0, 0, alice, FOREVER, {
       from: alice,
       value: ether('1'),
     });
-    console.log(x);
     expect(await lp.balanceOf(alice)).to.be.bignumber.above(ether('0'));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -110,6 +110,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     );
     expect(await lp.balanceOf(alice)).to.be.bignumber.equal(ether('0'));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -124,6 +125,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     );
     expect(await lp.balanceOf(alice)).to.be.bignumber.equal(ether('0'));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -140,6 +142,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     expect(await lp.balanceOf(alice)).to.be.bignumber.above(ether('0'));
     assertAlmostEqual(new BN(await web3.eth.getBalance(alice)), aliceBalanceBefore.sub(ether('1.045454545454545454')));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -156,6 +159,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     expect(await lp.balanceOf(alice)).to.be.bignumber.above(ether('0'));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceBalanceBefore.sub(ether('9.5652173913043478')));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -180,6 +184,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     assertAlmostEqual(await token.balanceOf(alice), aliceTokenBalanceBefore.add(ether('95.65217391304347800')));
     assertAlmostEqual(new BN(await web3.eth.getBalance(alice)), aliceETHBalanceBefore.add(ether('1')));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -202,6 +207,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
       'IbETHRouter: receive less ETH than amountETHmin'
     );
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -224,6 +230,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
       'UniswapV2Router: INSUFFICIENT_A_AMOUNT'
     );
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -248,6 +255,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     assertAlmostEqual(await token.balanceOf(alice), aliceTokenBalanceBefore.add(ether('190.116529919717225111')));
     assertAlmostEqual(new BN(await web3.eth.getBalance(alice)), aliceETHBalanceBefore);
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -270,6 +278,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
       'IbETHRouter: receive less Alpha than amountAlphaMin'
     );
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -285,6 +294,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.sub(ether('1')));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceBalanceBefore.add(ether('94.464356006673746911')));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -297,6 +307,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
       'UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT'
     );
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -305,15 +316,16 @@ contract('IbETHRouter', ([deployer, alice]) => {
     const aliceTokenBalanceBefore = await token.balanceOf(alice);
     await token.approve(ibETHRouter.address, ether('100'), { from: alice });
     // 0.9 ETH, yield 0.860869565 ibETH
-    // so should use slightly more than 86.08 MOCK (87.095775529377361063)
+    // so should use slightly more than 86.08 MOCK (87.095775529377361165)
     await ibETHRouter.swapAlphaForExactETH(ether('0.9'), ether('100'), alice, FOREVER, {
       from: alice,
     });
     assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.add(ether('0.9')));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(
-      aliceTokenBalanceBefore.sub(ether('87.095775529377361063'))
+      aliceTokenBalanceBefore.sub(ether('87.095775529377361165'))
     );
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -328,6 +340,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
       'UniswapV2Router: EXCESSIVE_INPUT_AMOUNT'
     );
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -343,6 +356,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.add(ether('1.032028854142382266')));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceTokenBalanceBefore.sub(ether('100')));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -357,6 +371,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
       'IbETHRouter: receive less ETH than amountETHmin'
     );
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -365,14 +380,15 @@ contract('IbETHRouter', ([deployer, alice]) => {
     const aliceTokenBalanceBefore = await token.balanceOf(alice);
     // 100 MOCK need ~1 ibETH
     // Deposit 1.045454545454545454 ETH, yield 1 ibETH
-    // so should get add slightly more than 1.045 ETH (1.059192269185886403 ETH)
+    // so should get add slightly more than 1.045 ETH (1.061262461185886404 ETH)
     await ibETHRouter.swapETHForExactAlpha(ether('100'), alice, FOREVER, {
       from: alice,
       value: ether('1.1'),
     });
-    assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.sub(ether('1.059192269185886403')));
+    assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.sub(ether('1.061262461185886404')));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceTokenBalanceBefore.add(ether('100')));
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
@@ -385,6 +401,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
       'UniswapV2Router: EXCESSIVE_INPUT_AMOUNT'
     );
     expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 });
