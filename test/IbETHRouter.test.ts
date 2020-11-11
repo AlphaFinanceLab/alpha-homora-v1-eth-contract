@@ -375,7 +375,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
     expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
   });
 
-  it('should be able to swap ETH for exact MOCK', async () => {
+  it('should be able to swap ETH for exact MOCK with dust ETH back', async () => {
     const aliceETHBalanceBefore = new BN(await web3.eth.getBalance(alice));
     const aliceTokenBalanceBefore = await token.balanceOf(alice);
     // 100 MOCK need ~1 ibETH
@@ -384,6 +384,23 @@ contract('IbETHRouter', ([deployer, alice]) => {
     await ibETHRouter.swapETHForExactAlpha(ether('100'), alice, FOREVER, {
       from: alice,
       value: ether('1.1'),
+    });
+    assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.sub(ether('1.061262461185886404')));
+    expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceTokenBalanceBefore.add(ether('100')));
+    expect(await token.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(await bank.balanceOf(ibETHRouter.address)).to.be.bignumber.equal(ether('0'));
+    expect(new BN(await web3.eth.getBalance(ibETHRouter.address))).to.be.bignumber.equal(ether('0'));
+  });
+
+  it('should be able to swap ETH for exact MOCK with no dust ETH back', async () => {
+    const aliceETHBalanceBefore = new BN(await web3.eth.getBalance(alice));
+    const aliceTokenBalanceBefore = await token.balanceOf(alice);
+    // 100 MOCK need ~1 ibETH
+    // Deposit 1.045454545454545454 ETH, yield 1 ibETH
+    // so should get add slightly more than 1.045 ETH (1.061262461185886404 ETH)
+    await ibETHRouter.swapETHForExactAlpha(ether('100'), alice, FOREVER, {
+      from: alice,
+      value: ether('1.059192269185886403'),
     });
     assertAlmostEqual(await web3.eth.getBalance(alice), aliceETHBalanceBefore.sub(ether('1.061262461185886404')));
     expect(await token.balanceOf(alice)).to.be.bignumber.equal(aliceTokenBalanceBefore.add(ether('100')));

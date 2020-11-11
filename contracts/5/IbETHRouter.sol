@@ -83,11 +83,11 @@ contract IbETHRouter is Ownable {
     }
 
     // **** ETH-ibETH FUNCTIONS ****
-    // Get number of ibETH needed to deposit to get exact amountIbETH from the Bank
+    // Get number of ibETH needed to withdraw to get exact amountETH from the Bank
     function ibETHForExactETH(uint256 amountETH) public view returns (uint256) {
         uint256 totalETH = IBank(ibETH).totalETH();        
         return totalETH == 0 ? amountETH : amountETH.mul(IBank(ibETH).totalSupply()).add(totalETH).sub(1).div(totalETH); 
-    } 
+    }   
     
     // Add ETH and Alpha from ibETH-Alpha Pool.
     // 1. Receive ETH and Alpha from caller.
@@ -225,6 +225,7 @@ contract IbETHRouter is Ownable {
         address[] memory path = new address[](2);
         path[0] = alpha;
         path[1] = ibETH;
+        IBank(ibETH).withdraw(0);
         uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(ibETHForExactETH(amountETHOut), amountAlphaInMax, path, address(this), deadline);                           
         IBank(ibETH).withdraw(swapAmounts[1]);
         amounts = new uint256[](2);
@@ -272,16 +273,16 @@ contract IbETHRouter is Ownable {
         uint256 amountIbETHInMax = IBank(ibETH).balanceOf(address(this));        
         address[] memory path = new address[](2);
         path[0] = ibETH;
-        path[1] = alpha;
-        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(amountAlphaOut, amountIbETHInMax, path, to, deadline);                                        
+        path[1] = alpha;                
+        uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(amountAlphaOut, amountIbETHInMax, path, to, deadline);                                                
+        amounts = new uint256[](2);               
+        amounts[1] = swapAmounts[1];
         // Transfer left over ETH back
-        if (amountIbETHInMax > swapAmounts[0]) {             
-            IBank(ibETH).withdraw(amountIbETHInMax.sub(swapAmounts[0]));        
-            amounts = new uint256[](2);
+        if (amountIbETHInMax > swapAmounts[0]) {                         
+            IBank(ibETH).withdraw(amountIbETHInMax.sub(swapAmounts[0]));                    
             amounts[0] = address(this).balance;
-            amounts[1] = swapAmounts[1];              
             TransferHelper.safeTransferETH(to, amounts[0]);
-        }        
+        }                                       
     }   
 
     /// @dev Recover ERC20 tokens that were accidentally sent to this smart contract.
