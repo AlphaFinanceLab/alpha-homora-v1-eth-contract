@@ -276,12 +276,13 @@ contract IbETHRouter is Ownable {
         path[1] = alpha;                
         uint256[] memory swapAmounts = IUniswapV2Router02(router).swapTokensForExactTokens(amountAlphaOut, amountIbETHInMax, path, to, deadline);                                                
         amounts = new uint256[](2);               
+        amounts[0] = msg.value;
         amounts[1] = swapAmounts[1];
         // Transfer left over ETH back
         if (amountIbETHInMax > swapAmounts[0]) {                         
             IBank(ibETH).withdraw(amountIbETHInMax.sub(swapAmounts[0]));                    
-            amounts[0] = address(this).balance;
-            TransferHelper.safeTransferETH(to, amounts[0]);
+            amounts[0] = msg.value - address(this).balance;
+            TransferHelper.safeTransferETH(to, address(this).balance);
         }                                       
     }   
 
