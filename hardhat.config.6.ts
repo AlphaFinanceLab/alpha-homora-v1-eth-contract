@@ -1,8 +1,17 @@
-usePlugin('@nomiclabs/buidler-truffle5');
-usePlugin('buidler-typechain');
+require('@nomiclabs/hardhat-truffle5');
+require('hardhat-typechain');
 
 module.exports = {
-  solc: {
+  defaultNetwork: 'hardhat',
+  networks: {
+    hardhat: {
+      gas: 12000000,
+      blockGasLimit: 0x1fffffffffffff,
+      allowUnlimitedContractSize: true,
+      timeout: 1800000,
+    },
+  },
+  solidity: {
     version: '0.6.12',
     optimizer: {
       enabled: true,

@@ -207,7 +207,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         address to,
         uint256 deadline
     ) public ensure(deadline) returns (uint256 amountA, uint256 amountB) {
-        address pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);
+        address pair = UniswapV2Library.pairFor(factory, tokenA, tokenB);        
         IUniswapV2Pair(pair).transferFrom(msg.sender, pair, liquidity); // send liquidity to pair
         (uint256 amount0, uint256 amount1) = IUniswapV2Pair(pair).burn(to);
         (address token0, ) = UniswapV2Library.sortTokens(tokenA, tokenB);
@@ -403,7 +403,7 @@ contract UniswapV2Router02 is IUniswapV2Router02 {
         address to,
         uint256 deadline
     ) external ensure(deadline) returns (uint256[] memory amounts) {
-        amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);
+        amounts = UniswapV2Library.getAmountsOut(factory, amountIn, path);        
         require(
             amounts[amounts.length - 1] >= amountOutMin,
             "UniswapV2Router: INSUFFICIENT_OUTPUT_AMOUNT"

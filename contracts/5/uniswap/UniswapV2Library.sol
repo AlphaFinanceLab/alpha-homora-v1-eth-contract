@@ -1,6 +1,7 @@
 pragma solidity >=0.5.0;
 
 import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol';
+import '@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol';
 import 'openzeppelin-solidity-2.3.0/contracts/math/SafeMath.sol';
 
 library UniswapV2Library {
@@ -18,20 +19,21 @@ library UniswapV2Library {
     address factory,
     address tokenA,
     address tokenB
-  ) internal pure returns (address pair) {
-    (address token0, address token1) = sortTokens(tokenA, tokenB);
-    pair = address(
-      uint256(
-        keccak256(
-          abi.encodePacked(
-            hex'ff',
-            factory,
-            keccak256(abi.encodePacked(token0, token1)),
-            hex'b594b680ac8ffbcd817033d8b9a0f18807d93811006cb8a3ad1884015bb00ea0' // init code hash
-          )
-        )
-      )
-    );
+  ) internal view returns (address pair) {
+    return IUniswapV2Factory(factory).getPair(tokenA, tokenB); // For easy testing
+    // (address token0, address token1) = sortTokens(tokenA, tokenB);        
+    // pair = address(
+    //   uint256(
+    //     keccak256(
+    //       abi.encodePacked(
+    //         hex'ff',
+    //         factory,
+    //         keccak256(abi.encodePacked(token0, token1)),
+    //         hex'fc4928e335b531bb85a6d9454f46863f9d6101351e3e8b84620b1806d4a3fcb3' // init code hash
+    //       )
+    //     )
+    //   )
+    // );
   }
 
   // fetches and sorts the reserves for a pair
