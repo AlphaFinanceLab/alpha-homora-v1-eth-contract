@@ -1,8 +1,9 @@
 pragma solidity =0.5.16;
-import "./uniswap/UniswapV2Library.sol";
-import "./uniswap/IUniswapV2Router02.sol";
 import "openzeppelin-solidity-2.3.0/contracts/ownership/Ownable.sol";
 import "openzeppelin-solidity-2.3.0/contracts/token/ERC20/IERC20.sol";
+import "@uniswap/v2-core/contracts/libraries/Math.sol";
+import "./uniswap/UniswapV2Library.sol";
+import "./uniswap/IUniswapV2Router02.sol";
 import "./interfaces/IBank.sol";
 
 // helper methods for interacting with ERC20 tokens and sending ETH that do not consistently return true/false
@@ -130,6 +131,154 @@ contract IbETHRouter is Ownable {
             TransferHelper.safeTransferETH(msg.sender, address(this).balance);
         }
         require(amountETH >= amountETHMin, "IbETHRouter: require more ETH than amountETHmin");
+    }
+
+    /// @dev Compute optimal deposit amount
+    /// @param amtA amount of token A desired to deposit
+    /// @param amtB amonut of token B desired to deposit
+    /// @param resA amount of token A in reserve
+    /// @param resB amount of token B in reserve
+    /// (forked from ./StrategyAddTwoSidesOptimal.sol)
+    function optimalDeposit(
+        uint256 amtA,
+        uint256 amtB,
+        uint256 resA,
+        uint256 resB
+    ) internal pure returns (uint256 swapAmt, bool isReversed) {
+        if (amtA.mul(resB) >= amtB.mul(resA)) {
+            swapAmt = _optimalDepositA(amtA, amtB, resA, resB);
+            isReversed = false;
+        } else {
+            swapAmt = _optimalDepositA(amtB, amtA, resB, resA);
+            isReversed = true;
+        }
+    }
+
+    /// @dev Compute optimal deposit amount helper
+    /// @param amtA amount of token A desired to deposit
+    /// @param amtB amonut of token B desired to deposit
+    /// @param resA amount of token A in reserve
+    /// @param resB amount of token B in reserve
+    /// (forked from ./StrategyAddTwoSidesOptimal.sol)
+    function _optimalDepositA(
+        uint256 amtA,
+        uint256 amtB,
+        uint256 resA,
+        uint256 resB
+    ) internal pure returns (uint256) {
+        require(amtA.mul(resB) >= amtB.mul(resA), "Reversed");
+
+        uint256 a = 997;
+        uint256 b = uint256(1997).mul(resA);
+        uint256 _c = (amtA.mul(resB)).sub(amtB.mul(resA));
+        uint256 c = _c.mul(1000).div(amtB.add(resB)).mul(resA);
+
+        uint256 d = a.mul(c).mul(4);
+        uint256 e = Math.sqrt(b.mul(b).add(d));
+
+        uint256 numerator = e.sub(b);
+        uint256 denominator = a.mul(2);
+
+        return numerator.div(denominator);
+    }
+
+    // Add ibETH and Alpha to ibETH-Alpha Pool.
+    // All ibETH and Alpha supplied are optimally swap and add too ibETH-Alpha Pool.
+    function addLiquidityTwoSidesOptimal(        
+        uint256 amountIbETHDesired,        
+        uint256 amountAlphaDesired,        
+        uint256 amountLPMin,
+        address to,
+        uint256 deadline
+    )
+        external        
+        returns (            
+            uint256 liquidity
+        ) {        
+        if (amountIbETHDesired > 0) {
+            TransferHelper.safeTransferFrom(ibETH, msg.sender, address(this), amountIbETHDesired);    
+        }
+        if (amountAlphaDesired > 0) {
+            TransferHelper.safeTransferFrom(alpha, msg.sender, address(this), amountAlphaDesired);    
+        }        
+        uint256 swapAmt;
+        bool isReversed;
+        {
+            (uint256 r0, uint256 r1, ) = IUniswapV2Pair(lpToken).getReserves();
+            (uint256 ibETHReserve, uint256 alphaReserve) = IUniswapV2Pair(lpToken).token0() == ibETH ? (r0, r1) : (r1, r0);
+            (swapAmt, isReversed) = optimalDeposit(amountIbETHDesired, amountAlphaDesired, ibETHReserve, alphaReserve);
+        }
+        address[] memory path = new address[](2);
+        (path[0], path[1]) = isReversed ? (alpha, ibETH) : (ibETH, alpha);        
+        IUniswapV2Router02(router).swapExactTokensForTokens(swapAmt, 0, path, address(this), now);                
+        (,, liquidity) = IUniswapV2Router02(router).addLiquidity(
+            alpha,
+            ibETH,
+            IERC20(alpha).balanceOf(address(this)),            
+            IBank(ibETH).balanceOf(address(this)),
+            0,            
+            0,
+            to,
+            deadline
+        );        
+        uint256 dustAlpha = IERC20(alpha).balanceOf(address(this));
+        uint256 dustIbETH = IBank(ibETH).balanceOf(address(this));
+        if (dustAlpha > 0) {
+            TransferHelper.safeTransfer(alpha, msg.sender, dustAlpha);
+        }    
+        if (dustIbETH > 0) {
+            TransferHelper.safeTransfer(ibETH, msg.sender, dustIbETH);
+        }                    
+        require(liquidity >= amountLPMin, "IbETHRouter: receive less lpToken than amountLPMin");
+    }
+
+    // Add ETH and Alpha to ibETH-Alpha Pool.
+    // All ETH and Alpha supplied are optimally swap and add too ibETH-Alpha Pool.
+    function addLiquidityTwoSidesOptimalETH(                
+        uint256 amountAlphaDesired,        
+        uint256 amountLPMin,
+        address to,
+        uint256 deadline
+    )
+        external
+        payable        
+        returns (            
+            uint256 liquidity
+        ) {                
+        if (amountAlphaDesired > 0) {
+            TransferHelper.safeTransferFrom(alpha, msg.sender, address(this), amountAlphaDesired);    
+        }       
+        IBank(ibETH).deposit.value(msg.value)();   
+        uint256 amountIbETHDesired = IBank(ibETH).balanceOf(address(this));                  
+        uint256 swapAmt;
+        bool isReversed;
+        {
+            (uint256 r0, uint256 r1, ) = IUniswapV2Pair(lpToken).getReserves();
+            (uint256 ibETHReserve, uint256 alphaReserve) = IUniswapV2Pair(lpToken).token0() == ibETH ? (r0, r1) : (r1, r0);
+            (swapAmt, isReversed) = optimalDeposit(amountIbETHDesired, amountAlphaDesired, ibETHReserve, alphaReserve);
+        }        
+        address[] memory path = new address[](2);
+        (path[0], path[1]) = isReversed ? (alpha, ibETH) : (ibETH, alpha);        
+        IUniswapV2Router02(router).swapExactTokensForTokens(swapAmt, 0, path, address(this), now);                
+        (,, liquidity) = IUniswapV2Router02(router).addLiquidity(
+            alpha,
+            ibETH,
+            IERC20(alpha).balanceOf(address(this)),            
+            IBank(ibETH).balanceOf(address(this)),
+            0,            
+            0,
+            to,
+            deadline
+        );        
+        uint256 dustAlpha = IERC20(alpha).balanceOf(address(this));
+        uint256 dustIbETH = IBank(ibETH).balanceOf(address(this));
+        if (dustAlpha > 0) {
+            TransferHelper.safeTransfer(alpha, msg.sender, dustAlpha);
+        }    
+        if (dustIbETH > 0) {
+            TransferHelper.safeTransfer(ibETH, msg.sender, dustIbETH);
+        }                    
+        require(liquidity >= amountLPMin, "IbETHRouter: receive less lpToken than amountLPMin");
     }
       
     // Remove ETH and Alpha from ibETH-Alpha Pool.
