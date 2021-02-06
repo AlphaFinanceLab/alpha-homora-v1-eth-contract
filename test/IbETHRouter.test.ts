@@ -39,7 +39,6 @@ contract('IbETHRouter', ([deployer, alice]) => {
   const KILL_PRIZE_BPS = new BN('1000'); // 10% Kill prize
   const INTEREST_RATE = new BN('3472222222222'); // 30% per year
   const MIN_DEBT_SIZE = ether('1'); // 1 ETH min debt size
-  const DEFAULT_ETH_BALANCE = ether('10000');
 
   let factory: UniswapV2FactoryInstance;
   let weth: WETHInstance;
@@ -49,6 +48,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
   let lp: UniswapV2PairInstance;
   let config: SimpleBankConfigInstance;
   let bank: BankInstance;
+  let aliceBalanceAfterDepositToBank: number;
 
   beforeEach(async () => {
     factory = await UniswapV2Factory.new(deployer);
@@ -64,6 +64,10 @@ contract('IbETHRouter', ([deployer, alice]) => {
     expect(await web3.eth.getBalance(bank.address)).to.be.bignumber.equal(ether('110'));
     expect(await bank.balanceOf(alice)).to.be.bignumber.equal(ether('10'));
     expect(await bank.balanceOf(deployer)).to.be.bignumber.equal(ether('100'));
+
+    // Set aliceBalanceAfterDepositToBank to prevent test failed 
+    // when running tests for every contracts
+    aliceBalanceAfterDepositToBank = new BN(await web3.eth.getBalance(alice));
 
     // Send some ETH to Bank to create interest
     // This make 1 ibETH = 1.045454545454545454 ETH
@@ -84,7 +88,7 @@ contract('IbETHRouter', ([deployer, alice]) => {
   it('should receive some interest when redeem ibETH', async () => {
     await bank.withdraw(await bank.balanceOf(alice), { from: alice });
     expect(await bank.balanceOf(alice)).to.be.bignumber.equal(ether('0'));
-    expect(new BN(await web3.eth.getBalance(alice))).to.be.bignumber.above(DEFAULT_ETH_BALANCE);
+    expect(new BN(await web3.eth.getBalance(alice))).to.be.bignumber.above(aliceBalanceAfterDepositToBank);
   });
 
   it('should be able to add liquidity to ibETH-MOCK with ETH and MOCK', async () => {
