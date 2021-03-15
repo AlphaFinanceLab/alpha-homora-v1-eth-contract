@@ -18,12 +18,27 @@ contract StrategyAllETHOnly is Ownable, ReentrancyGuard, Strategy {
     IUniswapV2Router02 public router;
     address public weth;
 
+    mapping(address => bool) public whitelistedTokens;
+
     /// @dev Create a new add ETH only strategy instance.
     /// @param _router The Uniswap router smart contract.
     constructor(IUniswapV2Router02 _router) public {
         factory = IUniswapV2Factory(_router.factory());
         router = _router;
         weth = _router.WETH();
+    }
+
+    /// @dev Set whitelist tokens
+    /// @param tokens Token list to set statuses
+    /// @param statuses Status list to set tokens to
+    function setWhitelistTokens(address[] calldata tokens, bool[] calldata statuses)
+        external
+        onlyOwner
+    {
+        require(tokens.length == statuses.length, 'tokens & statuses length mismatched');
+        for (uint256 idx = 0; idx < tokens.length; idx++) {
+            whitelistedTokens[tokens[idx]] = statuses[idx];
+        }
     }
 
     /// @dev Execute worker strategy. Take LP tokens + ETH. Return LP tokens + ETH.
@@ -35,6 +50,7 @@ contract StrategyAllETHOnly is Ownable, ReentrancyGuard, Strategy {
     {
         // 1. Find out what farming token we are dealing with and min additional LP tokens.
         (address fToken, uint256 minLPAmount) = abi.decode(data, (address, uint256));
+        require(whitelistedTokens[fToken], 'token not whitelisted');
         IUniswapV2Pair lpToken = IUniswapV2Pair(factory.getPair(fToken, weth));
         // 2. Compute the optimal amount of ETH to be converted to farming tokens.
         uint256 balance = address(this).balance;

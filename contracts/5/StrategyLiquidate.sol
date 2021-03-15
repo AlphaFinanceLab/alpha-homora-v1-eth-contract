@@ -14,12 +14,27 @@ contract StrategyLiquidate is Ownable, ReentrancyGuard, Strategy {
     IUniswapV2Router02 public router;
     address public weth;
 
+    mapping(address => bool) public whitelistedTokens;
+
     /// @dev Create a new liquidate strategy instance.
     /// @param _router The Uniswap router smart contract.
     constructor(IUniswapV2Router02 _router) public {
         factory = IUniswapV2Factory(_router.factory());
         router = _router;
         weth = _router.WETH();
+    }
+
+    /// @dev Set whitelisted tokens
+    /// @param tokens Token list to set whitelist status
+    /// @param statuses Status list to set tokens to
+    function setWhitelistTokens(address[] calldata tokens, bool[] calldata statuses)
+        external
+        onlyOwner
+    {
+        require(tokens.length == statuses.length, 'tokens & statuses length mismatched');
+        for (uint256 idx = 0; idx < tokens.length; idx++) {
+            whitelistedTokens[tokens[idx]] = statuses[idx];
+        }
     }
 
     /// @dev Execute worker strategy. Take LP tokens + ETH. Return LP tokens + ETH.
@@ -31,6 +46,7 @@ contract StrategyLiquidate is Ownable, ReentrancyGuard, Strategy {
     {
         // 1. Find out what farming token we are dealing with.
         (address fToken, uint256 minETH) = abi.decode(data, (address, uint256));
+        require(whitelistedTokens[fToken], 'token not whitelisted');
         IUniswapV2Pair lpToken = IUniswapV2Pair(factory.getPair(fToken, weth));
         // 2. Remove all liquidity back to ETH and farming tokens.
         lpToken.approve(address(router), uint256(-1));
