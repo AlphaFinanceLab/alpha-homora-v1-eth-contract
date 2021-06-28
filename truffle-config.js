@@ -45,14 +45,11 @@ module.exports = {
     //
     kovan: {
       provider: function () {
-        return new HDWalletProvider(
-          process.env.PRIVATE_KEY,
-          'https://kovan.infura.io/v3/'+process.env.INFURA_KEY
-        );
+        return new HDWalletProvider(process.env.PRIVATE_KEY, 'https://kovan.infura.io/v3/' + process.env.INFURA_API_KEY);
       },
       network_id: '42',
       skipDryRun: true,
-    },
+    }
     // Another network with more advanced options...
     // advanced: {
     // port: 8777,             // Custom port
@@ -97,11 +94,9 @@ module.exports = {
   },
 
   // Verify contract on Etherscan
-  plugins: [
-    'truffle-plugin-verify'
-  ],
+  plugins: ['truffle-plugin-verify'],
 
   api_keys: {
-    etherscan: process.env.ETHERSCAN_API_KEY
-  }
+    etherscan: process.env.ETHERSCAN_API_KEY,
+  },
 };
